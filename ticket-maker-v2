@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8">
+  <title>ticket-maker-v2</title>
+  
+
+</head>
+<body>
+<!-- partial:index.partial.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Submit a Support Ticket</title>
+  <style>
+    :root{
+      --g-900:#0f3d15; --g-800:#1b5e20; --g-700:#2e7d32; --g-500:#43a047;
+      --g-300:#81c784; --g-200:#c8e6c9; --g-100:#e8f5e9; --g-050:#f9fdf9;
+    }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      padding: 20px; max-width: 760px; margin: 0 auto;
+      background: var(--g-050); color: #1a1a1a;
+    }
+    h1 { color: var(--g-800); margin-bottom: .4em; }
+    p.intro { margin: 0 0 1.25em; color: var(--g-700); line-height: 1.45; }
+    label { display:block; margin: 12px 0 6px; font-weight: 600; color: var(--g-800); }
+    select, button, textarea {
+      width: 100%; padding: 10px; font-size: 15px; border-radius: 8px;
+      border: 1px solid var(--g-200); background:#fff;
+    }
+    select:focus, button:focus, textarea:focus { outline: 2px solid var(--g-500); }
+    select[disabled], textarea[disabled] { background: #f3f7f3; color:#6b6b6b; }
+    .row { display:flex; gap:12px; margin-top:12px; }
+    .row > * { flex:1; min-width: 180px; }
+    button.primary {
+      background: var(--g-700); color: #fff; border: none; font-weight: 700; cursor: pointer;
+      transition: background .18s;
+    }
+    button.primary:hover { background: var(--g-800); }
+    button.ghost {
+      background: #fff; color: var(--g-800); border: 1px solid var(--g-300); font-weight: 600; cursor: pointer;
+    }
+    button[disabled] { opacity:.6; cursor: not-allowed; }
+    .note { font-size: 13px; color: var(--g-700); margin-top: 6px; }
+    .status {
+      margin-top: 10px; padding: 10px; border-radius: 8px; border:1px solid var(--g-200); background: var(--g-100);
+      color: var(--g-800); font-size: 14px;
+    }
+    .status.error { border-color:#f2b8b5; background:#fdecea; color:#b3261e; }
+    pre#result {
+      margin-top:16px; background: var(--g-100); padding:12px; border-radius:8px; white-space:pre-wrap; border:1px solid var(--g-200);
+    }
+    .section { margin-top: 18px; padding-top: 6px; border-top: 1px dashed var(--g-200); }
+    .muted { color:#517a53; font-size:13px; margin-top:6px; }
+
+    /* ADDED: Pretty response styling */
+    #resultPretty { margin-top: 10px; }
+    #resultPretty ul { margin: 8px 0 0; padding-left: 18px; }
+    #resultPretty li { margin: 2px 0; }
+    #resultPretty a { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>Submit a Support Ticket</h1>
+  <p class="intro">
+    Fill out the form below to submit a support request. Your ticket will be
+    automatically created in ClickUp and routed to the correct client workspace
+    using the selected template. Once submitted, you'll receive a link to review
+    and confirm the task.
+  </p>
+
+  <form id="form" novalidate>
+    <label for="submitter">Who is submitting this ticket? *</label>
+    <select id="submitter" name="submitter" required disabled>
+      <option value="" selected>Click “Fetch new data” to load submitters…</option>
+    </select>
+
+    <div class="section">
+      <label for="client">Which client is this for? *</label>
+      <select id="client" name="client" required disabled>
+        <option value="" selected>Click “Fetch new data” to load clients…</option>
+      </select>
+    </div>
+
+    <div class="section">
+      <label for="template">What type of ticket is this? *</label>
+      <select id="template" name="template" required disabled>
+        <option value="" selected>Click “Fetch new data” to load templates…</option>
+      </select>
+      <div class="muted">Selecting a template will auto-fill the description below.</div>
+    </div>
+
+    <div class="section">
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="10" placeholder="Template description will appear here after you choose a template…" disabled></textarea>
+    </div>
+
+    <div class="row">
+      <button type="button" id="btnFetch" class="ghost">Fetch new data</button>
+      <button type="submit" class="primary" id="btnSubmit" disabled>Submit Ticket</button>
+    </div>
+
+    <div id="status" class="status" style="display:none;"></div>
+    <div class="note">Click “Fetch new data” to pull the latest rows from Google Sheets.</div>
+  </form>
+
+  <pre id="result"></pre>
+  <!-- ADDED: pretty result container -->
+  <div id="resultPretty" class="status" style="display:none;"></div>
+
+  <script>
+    // 🔗 Endpoints
+    const CHOICES_URL        = "https://n8n-14lp.onrender.com/webhook/ticket-choices"; // GET
+    const TICKET_WEBHOOK_URL = "https://n8n-14lp.onrender.com/webhook/ticker-maker";   // POST
+
+    // ---------- HELPERS ----------
+    const $ = s => document.querySelector(s);
+
+    /* ADDED: helpers for safe HTML + linkifying + pretty renderer */
+    function escapeHtml(str){
+      return String(str)
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
+    }
+    function linkify(str){
+      return str.replace(/(https?:\/\/[^\s"']+)/g, (m) =>
+        `<a href="${m}" target="_blank" rel="noopener">${m}</a>`
+      );
+    }
+    function renderPrettyResponse(bodyText, statusCode){
+      const box = document.getElementById("resultPretty");
+      let html = `<strong>Response ${statusCode}</strong>`;
+      try{
+        const obj = JSON.parse(bodyText);
+        const rows = Object.entries(obj).map(([k,v]) => {
+          const value = typeof v === "string" ? linkify(escapeHtml(v)) : escapeHtml(JSON.stringify(v, null, 2));
+          return `<li><strong>${escapeHtml(k)}:</strong> ${value}</li>`;
+        }).join("");
+        html += `<ul>${rows}</ul>`;
+      }catch(_){
+        html += `<pre style="white-space:pre-wrap;margin:6px 0 0;">${linkify(escapeHtml(bodyText))}</pre>`;
+      }
+      box.innerHTML = html;
+      box.style.display = "block";
+    }
+    /* END ADDED */
+
+    function setStatus(text, isError=false){
+      const el = $("#status");
+      if(!text){ el.style.display="none"; el.textContent=""; el.classList.remove("error"); return; }
+      el.textContent = text;
+      el.classList.toggle("error", !!isError);
+      el.style.display = "block";
+    }
+
+    function enableForm(enabled){
+      $("#submitter").disabled = !enabled;
+      $("#client").disabled = !enabled;
+      $("#template").disabled = !enabled;
+      $("#description").disabled = !enabled;
+      $("#btnSubmit").disabled = !enabled;
+    }
+
+    function option(valObj, labelText){
+      const opt = document.createElement("option");
+      opt.value = JSON.stringify(valObj);
+      opt.textContent = labelText;
+      return opt;
+    }
+
+    function fillSubmitter(items){
+      const el = $("#submitter");
+      el.innerHTML = "";
+      el.appendChild(new Option("Select a submitter…","",true,true));
+      (items || []).forEach(item => {
+        el.appendChild(option(
+          { id: String(item.value || ""), name: String(item.label || "") },
+          item.label || ""
+        ));
+      });
+    }
+
+    function fillClient(items){
+      const el = $("#client");
+      el.innerHTML = "";
+      el.appendChild(new Option("Select a client…","",true,true));
+      (items || []).forEach(item => {
+        el.appendChild(option(
+          {
+            name: String(item.label || ""),
+            listId: String(item.value || item.listId || ""),
+            folderId: String(item.folderId || ""),
+            ticketId: String(item.ticketId || "")
+          },
+          item.label || ""
+        ));
+      });
+    }
+
+    function fillTemplates(items){
+      const el = $("#template");
+      el.innerHTML = "";
+      el.appendChild(new Option("Select a template…","",true,true));
+      (items || []).forEach(item => {
+        el.appendChild(option(
+          {
+            id:   String(item.value || item.id || ""),
+            name: String(item.label || item.name || ""),
+            data: String(item.data  || "")
+          },
+          item.label || item.name || ""
+        ));
+      });
+    }
+
+    function dedupeBy(arr, keyFn){
+      const seen = new Set();
+      return (arr || []).filter(x => {
+        const k = keyFn(x);
+        if(!k || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    }
+
+    // ---------- FETCH CURRENT DATA (no defaults) ----------
+    async function fetchChoices(){
+      const url = CHOICES_URL + "?t=" + Date.now(); // cache-buster
+      const res = await fetch(url, { method:"GET", cache:"no-store" });
+      const text = await res.text();
+      if(!res.ok) throw new Error(`HTTP ${res.status}: ${text}`);
+      let data; try { data = JSON.parse(text); } catch(e){ throw new Error("Invalid JSON: " + text); }
+      return data;
+    }
+
+    async function handleFetchNew(){
+      try{
+        setStatus("Fetching latest data…");
+        enableForm(false);
+
+        const data = await fetchChoices();
+
+        // Normalize submitters -> [{label, value}]
+        const submitters = Array.isArray(data.submitters)
+          ? data.submitters.map(s => ({ label:String(s.label||"").trim(), value:String(s.value||"").trim() }))
+          : [];
+
+        // Normalize clients -> [{label, listId/value, folderId, ticketId}]
+        const clients = Array.isArray(data.clients)
+          ? data.clients.map(c => ({
+              label: String(c.label||"").trim(),
+              value: String(c.value || c.listId || "").trim(),
+              folderId: String(c.folderId || "").trim(),
+              ticketId: String(c.ticketId || "").trim()
+            }))
+          : [];
+
+        // Normalize templates -> [{label, value, data}]
+        const templates = Array.isArray(data.templates)
+          ? data.templates.map(t => ({
+              label: String(t.label || t.name || t["Matched Template Name"] || "").trim(),
+              value: String(t.value || t.id || t["ID"] || "").trim(),
+              data:  String(t.data  || t["Data"] || "").trim()
+            }))
+          : [];
+
+        // Dedupe by primary IDs
+        const finalSubmitters = dedupeBy(submitters, x => x.value);
+        const finalClients    = dedupeBy(clients,    x => x.value);
+        const finalTemplates  = dedupeBy(templates,  x => x.value);
+
+        fillSubmitter(finalSubmitters);
+        fillClient(finalClients);
+        fillTemplates(finalTemplates);
+
+        // enable UI if at least one row for each
+        const ok = finalSubmitters.length && finalClients.length && finalTemplates.length;
+        enableForm(!!ok);
+        setStatus(ok ? "All data is added." : "Fetched, but no rows found. Add rows in the sheet and try again.");
+      }catch(e){
+        console.error(e);
+        setStatus("Couldn't fetch new data.", true);
+        enableForm(false);
+      }
+    }
+
+    // ---------- TEMPLATE -> DESCRIPTION AUTOFILL ----------
+    function handleTemplateChange(){
+      const raw = $("#template").value;
+      if(!raw){ $("#description").value = ""; return; }
+      try{
+        const t = JSON.parse(raw); // { id, name, data }
+        $("#description").value = t.data || "";
+      }catch(_){
+        $("#description").value = "";
+      }
+    }
+
+    // ---------- SUBMIT ----------
+    async function submitForm(e){
+      e.preventDefault();
+      const rawSubmitter = $("#submitter").value;
+      const rawClient    = $("#client").value;
+      const rawTemplate  = $("#template").value;
+      if(!rawSubmitter || !rawClient || !rawTemplate){
+        setStatus("Please choose submitter, client, and template.", true);
+        return;
+      }
+
+      const submitter = JSON.parse(rawSubmitter); // { id, name }
+      const client    = JSON.parse(rawClient);    // { name, listId, folderId, ticketId }
+      const template  = JSON.parse(rawTemplate);  // { id, name, data }
+      const description = $("#description").value || "";
+
+      setStatus("Submitting ticket…");
+      const r = await fetch(TICKET_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submitterId: submitter.id,
+          submitterName: submitter.name,
+          clientName: client.name,
+          clientListId: client.listId,
+          clientFolderId: client.folderId,
+          clientTicketTemplateId: client.ticketId,
+          templateId: template.id,
+          templateName: template.name,
+          descriptionText: description
+        })
+      });
+      const body = await r.text();
+      setStatus("");
+      $("#result").textContent = `Response ${r.status}:\n\n${body}`;
+
+      /* ADDED: render formatted, clickable output */
+      renderPrettyResponse(body, r.status);
+    }
+
+    // ---------- WIRE UP ----------
+    document.addEventListener("DOMContentLoaded", () => {
+      enableForm(false); // start disabled; user must click Fetch
+      $("#btnFetch").addEventListener("click", handleFetchNew);
+      $("#template").addEventListener("change", handleTemplateChange);
+      $("#form").addEventListener("submit", submitForm);
+    });
+  </script>
+</body>
+</html>
+<!-- partial -->
+  
+</body>
+</html>
