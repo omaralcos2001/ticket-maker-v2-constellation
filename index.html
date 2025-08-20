@@ -1,13 +1,3 @@
-<!DOCTYPE html>
-<html lang="en" >
-<head>
-  <meta charset="UTF-8">
-  <title>ticket-maker-v2</title>
-  
-
-</head>
-<body>
-<!-- partial:index.partial.html -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -27,12 +17,12 @@
     h1 { color: var(--g-800); margin-bottom: .4em; }
     p.intro { margin: 0 0 1.25em; color: var(--g-700); line-height: 1.45; }
     label { display:block; margin: 12px 0 6px; font-weight: 600; color: var(--g-800); }
-    select, button, textarea {
+    select, button, textarea, input[type="text"], input[type="url"], input[type="date"], input[type="datetime-local"] {
       width: 100%; padding: 10px; font-size: 15px; border-radius: 8px;
       border: 1px solid var(--g-200); background:#fff;
     }
-    select:focus, button:focus, textarea:focus { outline: 2px solid var(--g-500); }
-    select[disabled], textarea[disabled] { background: #f3f7f3; color:#6b6b6b; }
+    select:focus, button:focus, textarea:focus, input:focus { outline: 2px solid var(--g-500); }
+    select[disabled], textarea[disabled], input[disabled] { background: #f3f7f3; color:#6b6b6b; }
     .row { display:flex; gap:12px; margin-top:12px; }
     .row > * { flex:1; min-width: 180px; }
     button.primary {
@@ -56,11 +46,76 @@
     .section { margin-top: 18px; padding-top: 6px; border-top: 1px dashed var(--g-200); }
     .muted { color:#517a53; font-size:13px; margin-top:6px; }
 
-    /* ADDED: Pretty response styling */
+    /* Pretty response styling */
     #resultPretty { margin-top: 10px; }
     #resultPretty ul { margin: 8px 0 0; padding-left: 18px; }
     #resultPretty li { margin: 2px 0; }
     #resultPretty a { text-decoration: underline; }
+
+    /* Popover for searchable dropdown */
+    .select-anchor { position: relative; }
+    .pop-wrap {
+      position: absolute;
+      z-index: 9999;
+      width: var(--pop-width, 100%);
+      background:#fff;
+      border:1px solid var(--g-200);
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.15);
+      overflow: hidden;
+    }
+    .pop-search {
+      width:100%;
+      border:none;
+      border-bottom:1px solid var(--g-200);
+      padding:10px 12px;
+      font-size:14px;
+      outline:none;
+    }
+    .pop-list { max-height: 260px; overflow:auto; padding:6px 0; }
+    .pop-item {
+      padding:8px 12px; cursor:pointer; font-size:14px; line-height:1.3;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .pop-item:hover, .pop-item[aria-selected="true"] { background: var(--g-100); }
+
+    /* Description editor (links only; no images here) */
+    .rte-toolbar { display:flex; gap:8px; margin:6px 0 8px; flex-wrap: wrap; }
+    .rte-toolbar button { padding:6px 10px; font-size:13px; border-radius:6px; border:1px solid var(--g-300); background:#fff; cursor:pointer; }
+    .rte-box {
+      min-height: 160px; padding:10px; border:1px solid var(--g-200); border-radius:8px; background:#fff;
+    }
+    .rte-box:focus { outline: 2px solid var(--g-500); }
+    .rte-box:empty:before { content: attr(data-placeholder); color: #7aa07b; }
+    .rte-box a { text-decoration: underline; color: var(--g-700); }
+
+    /* Attachments */
+    .dropzone {
+      border: 2px dashed var(--g-300);
+      border-radius: 10px;
+      background: #fff;
+      padding: 16px;
+      text-align: center;
+      color: #517a53;
+      cursor: pointer;
+      user-select: none;
+    }
+    .dropzone.dragover { background: var(--g-100); border-color: var(--g-500); }
+    .img-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap: 10px; margin-top:10px; }
+    .img-card { border:1px solid var(--g-200); border-radius:10px; overflow:hidden; background:#fff; position:relative; }
+    .img-card img { width:100%; height:110px; object-fit:cover; display:block; cursor:pointer; }
+    .img-remove {
+      position:absolute; top:6px; right:6px; background:#fff; border:1px solid var(--g-300);
+      border-radius:8px; padding:2px 8px; font-size:12px; cursor:pointer;
+    }
+
+    /* Image gallery modal */
+    .img-modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display:none; align-items: center; justify-content: center; z-index: 10000; }
+    .img-panel { background: #fff; border-radius: 12px; padding: 14px; max-width: 960px; width: calc(100% - 32px); max-height: 85vh; overflow: auto; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .modal-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    .modal-top button { border:1px solid var(--g-300); background:#fff; border-radius:8px; padding:6px 10px; cursor:pointer; }
+    .img-viewer { display:flex; justify-content:center; margin-bottom:12px; }
+    .img-viewer img { max-width:100%; max-height:60vh; border-radius:10px; }
   </style>
 </head>
 <body>
@@ -74,28 +129,85 @@
 
   <form id="form" novalidate>
     <label for="submitter">Who is submitting this ticket? *</label>
-    <select id="submitter" name="submitter" required disabled>
-      <option value="" selected>Click “Fetch new data” to load submitters…</option>
-    </select>
+    <div class="select-anchor">
+      <select id="submitter" name="submitter" required disabled data-searchable>
+        <option value="" selected>Click “Fetch new data” to load submitters…</option>
+      </select>
+    </div>
+
+    <!-- Team dropdown right below submitter -->
+    <div class="section">
+      <label for="team">Which team is this from? *</label>
+      <div class="select-anchor">
+        <select id="team" name="team" required data-searchable>
+          <option value="" selected>Select a team…</option>
+          <option>Ads</option>
+          <option>Client Team</option>
+          <option>Operations</option>
+          <option>Sales & Marketing</option>
+          <option>SEO</option>
+          <option>Bilingual SEO</option>
+          <option>Content</option>
+          <option>Web</option>
+        </select>
+      </div>
+    </div>
 
     <div class="section">
       <label for="client">Which client is this for? *</label>
-      <select id="client" name="client" required disabled>
-        <option value="" selected>Click “Fetch new data” to load clients…</option>
-      </select>
+      <div class="select-anchor">
+        <select id="client" name="client" required disabled data-searchable>
+          <option value="" selected>Click “Fetch new data” to load clients…</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Client Website -->
+    <div class="section">
+      <label for="clientUrl">Client Website</label>
+      <input id="clientUrl" type="url" placeholder="Auto-filled after you choose a client…" disabled readonly />
+      <div class="muted" id="clientUrlLinkWrap" style="display:none;">
+        <a id="clientUrlLink" href="#" target="_blank" rel="noopener">Open website</a>
+      </div>
     </div>
 
     <div class="section">
       <label for="template">What type of ticket is this? *</label>
-      <select id="template" name="template" required disabled>
-        <option value="" selected>Click “Fetch new data” to load templates…</option>
-      </select>
-      <div class="muted">Selecting a template will auto-fill the description below.</div>
+      <div class="select-anchor">
+        <select id="template" name="template" required disabled data-searchable>
+          <option value="" selected>Click “Fetch new data” to load templates…</option>
+        </select>
+      </div>
+      <div class="muted">Selecting a template will auto-fill the description and due date/time.</div>
     </div>
 
+    <!-- Due Date/Time -->
+    <div class="section">
+      <label for="dueDate">Due Date & Time</label>
+      <input id="dueDate" type="datetime-local" />
+      <div class="muted">Auto-fills from template. Supports absolute (e.g., 2025-08-20 14:30) or relative like +8h, 2d 4h 30m.</div>
+    </div>
+
+    <!-- Description (links only) -->
     <div class="section">
       <label for="description">Description</label>
-      <textarea id="description" name="description" rows="10" placeholder="Template description will appear here after you choose a template…" disabled></textarea>
+      <div id="descriptionEditor" class="rte-box" contenteditable="true" data-placeholder="Template description will appear here after you choose a template…"></div>
+      <textarea id="description" name="description" style="display:none;"></textarea>
+    </div>
+
+    <!-- Attachments (separate from Description) -->
+    <div class="section">
+      <label>Attachments</label>
+      <div id="dropzone" class="dropzone" tabindex="0">
+        Click to upload, or drag & drop / paste images here
+      </div>
+      <div class="img-grid" id="attachGrid"></div>
+      <input type="file" id="fileImageInput" accept="image/*" multiple style="display:none" />
+      <div class="row">
+        <button type="button" id="btnUploadImage" class="ghost">Upload Image</button>
+        <button type="button" id="btnViewAttachments" class="ghost">View Images</button>
+      </div>
+      <div class="muted">Images are stored as separate attachments (not inside the description).</div>
     </div>
 
     <div class="row">
@@ -108,18 +220,29 @@
   </form>
 
   <pre id="result"></pre>
-  <!-- ADDED: pretty result container -->
   <div id="resultPretty" class="status" style="display:none;"></div>
 
+  <!-- Image gallery modal -->
+  <div id="imgModal" class="img-modal" aria-hidden="true">
+    <div class="img-panel" role="dialog" aria-modal="true" aria-label="Images in attachments">
+      <div class="modal-top">
+        <strong>Images in Attachments</strong>
+        <button type="button" id="btnCloseModal">Close</button>
+      </div>
+      <div class="img-viewer" id="imgViewer"></div>
+      <div id="imgGridModal" class="img-grid"></div>
+    </div>
+  </div>
+
   <script>
-    // 🔗 Endpoints
+    // Endpoints
     const CHOICES_URL        = "https://n8n-14lp.onrender.com/webhook/ticket-choices"; // GET
     const TICKET_WEBHOOK_URL = "https://n8n-14lp.onrender.com/webhook/ticker-maker";   // POST
 
     // ---------- HELPERS ----------
     const $ = s => document.querySelector(s);
+    const byId = id => document.getElementById(id);
 
-    /* ADDED: helpers for safe HTML + linkifying + pretty renderer */
     function escapeHtml(str){
       return String(str)
         .replace(/&/g,"&amp;")
@@ -134,7 +257,7 @@
       );
     }
     function renderPrettyResponse(bodyText, statusCode){
-      const box = document.getElementById("resultPretty");
+      const box = byId("resultPretty");
       let html = `<strong>Response ${statusCode}</strong>`;
       try{
         const obj = JSON.parse(bodyText);
@@ -149,10 +272,9 @@
       box.innerHTML = html;
       box.style.display = "block";
     }
-    /* END ADDED */
 
     function setStatus(text, isError=false){
-      const el = $("#status");
+      const el = byId("status");
       if(!text){ el.style.display="none"; el.textContent=""; el.classList.remove("error"); return; }
       el.textContent = text;
       el.classList.toggle("error", !!isError);
@@ -160,11 +282,13 @@
     }
 
     function enableForm(enabled){
-      $("#submitter").disabled = !enabled;
-      $("#client").disabled = !enabled;
-      $("#template").disabled = !enabled;
-      $("#description").disabled = !enabled;
-      $("#btnSubmit").disabled = !enabled;
+      byId("submitter").disabled = !enabled;
+      byId("client").disabled = !enabled;
+      byId("template").disabled = !enabled;
+      byId("btnSubmit").disabled = !enabled;
+      byId("dueDate").disabled = !enabled ? true : false;
+      byId("clientUrl").disabled = !enabled;
+      // Team stays enabled
     }
 
     function option(valObj, labelText){
@@ -174,8 +298,9 @@
       return opt;
     }
 
+    // ---------- SELECT FILL ----------
     function fillSubmitter(items){
-      const el = $("#submitter");
+      const el = byId("submitter");
       el.innerHTML = "";
       el.appendChild(new Option("Select a submitter…","",true,true));
       (items || []).forEach(item => {
@@ -184,39 +309,46 @@
           item.label || ""
         ));
       });
+      enhanceSelect(el);
     }
 
     function fillClient(items){
-      const el = $("#client");
+      const el = byId("client");
       el.innerHTML = "";
       el.appendChild(new Option("Select a client…","",true,true));
       (items || []).forEach(item => {
         el.appendChild(option(
           {
-            name: String(item.label || ""),
-            listId: String(item.value || item.listId || ""),
-            folderId: String(item.folderId || ""),
-            ticketId: String(item.ticketId || "")
+            name:     String(item.label || item["Matching True Name"] || ""),
+            listId:   String(item.value || item.listId || item["List ID"] || ""),
+            folderId: String(item.folderId || item["Folder ID"] || ""),
+            ticketId: String(item.ticketId || item["Ticket ID"] || ""),
+            url:      String(item.url || item.URL || item["URL"] || item.website || item.Website || item.link || item.Link || "")
           },
-          item.label || ""
+          item.label || item["Matching True Name"] || ""
         ));
       });
+      enhanceSelect(el);
+      updateClientWebsiteFromSelect();
     }
 
     function fillTemplates(items){
-      const el = $("#template");
+      const el = byId("template");
       el.innerHTML = "";
       el.appendChild(new Option("Select a template…","",true,true));
       (items || []).forEach(item => {
         el.appendChild(option(
           {
-            id:   String(item.value || item.id || ""),
-            name: String(item.label || item.name || ""),
-            data: String(item.data  || "")
+            id:   String(item.value || item.id || item["ID"] || ""),
+            name: String(item.label || item.name || item["Matched Template Name"] || ""),
+            data: String(item.data  || item["Data"] || ""),
+            due:  String(item.due   || item.dueDates || item["Due Dates"] || item["Due Date"] || "")
           },
-          item.label || item.name || ""
+          item.label || item.name || item["Matched Template Name"] || ""
         ));
       });
+      enhanceSelect(el);
+      handleTemplateChange();
     }
 
     function dedupeBy(arr, keyFn){
@@ -229,9 +361,237 @@
       });
     }
 
-    // ---------- FETCH CURRENT DATA (no defaults) ----------
+    // ---------- RTE (links only) ----------
+    const editor = byId("descriptionEditor");
+    function insertHtmlAtCursor(html){
+      editor.focus();
+      if(document.queryCommandSupported && document.queryCommandSupported("insertHTML")){
+        document.execCommand("insertHTML", false, html);
+      }else{
+        const sel = window.getSelection();
+        if(!sel || !sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        const frag = range.createContextualFragment(html);
+        range.insertNode(frag);
+        range.collapse(false);
+      }
+    }
+    function sanitizeUrl(u){
+      try{ const url=new URL(u); if(/^https?:$/.test(url.protocol)) return url.toString(); }catch(_){}
+      return "";
+    }
+    function insertLink(){
+      const href = sanitizeUrl(prompt("Enter URL to link:", "https://"));
+      if(!href) return;
+      insertHtmlAtCursor(`<a href="${href}" target="_blank" rel="noopener">${href}</a>`);
+    }
+
+    // ---------- ATTACHMENTS (separate from description) ----------
+    const attachments = []; // {name, type, size, dataUrl}
+
+    function addAttachmentFile(file){
+      if(!file || !file.type.startsWith("image/")) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        attachments.push({ name:file.name, type:file.type, size:file.size, dataUrl:reader.result });
+        renderAttachmentsGrid();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function renderAttachmentsGrid(){
+      const grid = byId("attachGrid");
+      grid.innerHTML = "";
+      attachments.forEach((a, idx) => {
+        const card = document.createElement("div");
+        card.className = "img-card";
+        const img = document.createElement("img");
+        img.src = a.dataUrl;
+        img.alt = a.name || "attachment";
+        img.addEventListener("click", () => openAttachmentGallery(idx));
+        const remove = document.createElement("button");
+        remove.className = "img-remove";
+        remove.type = "button";
+        remove.textContent = "Remove";
+        remove.addEventListener("click", (e) => {
+          e.stopPropagation();
+          attachments.splice(idx,1);
+          renderAttachmentsGrid();
+        });
+        card.appendChild(img);
+        card.appendChild(remove);
+        grid.appendChild(card);
+      });
+    }
+
+    // dropzone: click / drag&drop / paste
+    const dropzone = byId("dropzone");
+    dropzone.addEventListener("click", () => byId("fileImageInput").click());
+    dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      const files = Array.from(e.dataTransfer.files || []);
+      files.forEach(addAttachmentFile);
+    });
+    dropzone.addEventListener("paste", (e) => {
+      const dt = e.clipboardData;
+      if(!dt) return;
+      const fileItem = Array.from(dt.items || []).find(i => i.kind === "file" && i.type.startsWith("image/"));
+      if(fileItem){
+        e.preventDefault();
+        addAttachmentFile(fileItem.getAsFile());
+      }
+    });
+    byId("fileImageInput").addEventListener("change", (e) => {
+      const files = Array.from(e.target.files || []);
+      files.forEach(addAttachmentFile);
+      e.target.value = ""; // reset
+    });
+    byId("btnUploadImage").addEventListener("click", () => byId("fileImageInput").click());
+    byId("btnViewAttachments").addEventListener("click", () => openAttachmentGallery(0));
+
+    // ---------- Client Website ----------
+    function setClientWebsite(url){
+      const input = byId("clientUrl");
+      const wrap = byId("clientUrlLinkWrap");
+      const link = byId("clientUrlLink");
+      input.value = url || "";
+      if(url){ wrap.style.display = "block"; link.href = url; }
+      else   { wrap.style.display = "none"; }
+    }
+    function updateClientWebsiteFromSelect(){
+      const raw = byId("client").value;
+      if(!raw){ setClientWebsite(""); return; }
+      try{ const c = JSON.parse(raw); setClientWebsite(c.url || ""); }catch(_){ setClientWebsite(""); }
+    }
+
+    // ---------- Due Date parsing (supports hours/minutes) ----------
+    function two(n){ return String(n).padStart(2,"0"); }
+    function toLocalDatetimeValue(date){
+      const d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
+      return `${d.getUTCFullYear()}-${two(d.getUTCMonth()+1)}-${two(d.getUTCDate())}T${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`;
+    }
+    function parseRelativeSpec(s){
+      const m = s.trim().match(/^(?:in\s*)?([+-]?\d[\d\s\w:+-]*)$/i);
+      if(!m) return null;
+      const partRe = /([+-]?\d+)\s*(w|week|weeks|d|day|days|h|hr|hrs|hour|hours|m|min|mins|minute|minutes)/gi;
+      let totalMinutes = 0, found = false, p;
+      while((p = partRe.exec(s)) !== null){
+        found = true;
+        const val = parseInt(p[1],10);
+        const unit = p[2].toLowerCase();
+        let mult = 1;
+        if(unit.startsWith("w")) mult = 7*24*60;
+        else if(unit.startsWith("d")) mult = 24*60;
+        else if(unit.startsWith("h")) mult = 60;
+        else mult = 1;
+        totalMinutes += val * mult;
+      }
+      if(!found){
+        const bare = s.trim().match(/^([+-]?\d+)$/);
+        if(!bare) return null;
+        totalMinutes = parseInt(bare[1],10) * 60;
+      }
+      return new Date(Date.now() + totalMinutes*60000);
+    }
+    function setAutoDueDate(spec){
+      const input = byId("dueDate");
+      if(!spec){ input.value = ""; return; }
+      const s = String(spec).trim();
+
+      const absMatch = s.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}):?(\d{2}))?$/);
+      if(absMatch){
+        const [_, d, hh="00", mm="00"] = absMatch;
+        input.value = `${d}T${hh}:${mm}`;
+        return;
+      }
+      const native = new Date(s);
+      if(!isNaN(native.getTime())){
+        input.value = toLocalDatetimeValue(native);
+        return;
+      }
+      const rel = parseRelativeSpec(s);
+      if(rel){
+        input.value = toLocalDatetimeValue(rel);
+        return;
+      }
+      input.value = "";
+    }
+
+    // ---------- SEARCHABLE POPOVER ----------
+    function normalizeText(s){
+      return String(s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+    }
+    function enhanceSelect(selectEl){
+      if(selectEl.dataset.enhanced) return;
+      selectEl.dataset.enhanced = "1";
+      const anchor = selectEl.closest(".select-anchor") || selectEl.parentElement;
+      anchor.style.position = "relative";
+
+      let pop = null, search = null, list = null;
+      let items = [];
+
+      function buildItems(){
+        const opts = Array.from(selectEl.options);
+        items = opts.slice(1).map(o => ({ label: o.textContent || "", value: o.value }));
+      }
+      function openPopover(){
+        closePopover();
+        buildItems();
+        pop = document.createElement("div");
+        pop.className = "pop-wrap";
+        pop.style.setProperty('--pop-width', `${selectEl.offsetWidth}px`);
+        pop.style.top = (selectEl.offsetHeight + 6) + "px";
+        pop.style.left = "0";
+        search = document.createElement("input");
+        search.type = "text"; search.className = "pop-search"; search.placeholder = "Type to search…";
+        list = document.createElement("div"); list.className = "pop-list";
+        pop.appendChild(search); pop.appendChild(list); anchor.appendChild(pop);
+        renderList(items);
+        search.focus();
+        search.addEventListener("input", handleFilter);
+        search.addEventListener("keydown", handleKeys);
+        list.addEventListener("click", handleClick);
+        document.addEventListener("mousedown", outsideClose, true);
+        window.addEventListener("resize", closePopover);
+      }
+      function closePopover(){
+        if(pop){ document.removeEventListener("mousedown", outsideClose, true); window.removeEventListener("resize", closePopover); pop.remove(); }
+        pop = search = list = null;
+      }
+      function outsideClose(e){ if(pop && !pop.contains(e.target) && e.target !== selectEl) closePopover(); }
+      function handleClick(e){
+        const item = e.target.closest(".pop-item"); if(!item) return;
+        selectEl.value = item.dataset.value;
+        selectEl.dispatchEvent(new Event("change", {bubbles:true}));
+        closePopover(); selectEl.focus();
+      }
+      function handleKeys(e){
+        const focusable = Array.from(list.querySelectorAll(".pop-item"));
+        const current = list.querySelector('.pop-item[aria-selected="true"]');
+        let idx = current ? focusable.indexOf(current) : -1;
+        if(e.key === "ArrowDown"){ e.preventDefault(); idx = Math.min(idx + 1, focusable.length - 1); setActive(focusable[idx]); }
+        else if(e.key === "ArrowUp"){ e.preventDefault(); idx = Math.max(idx - 1, 0); setActive(focusable[idx]); }
+        else if(e.key === "Enter"){ e.preventDefault(); if(current){ selectEl.value = current.dataset.value; selectEl.dispatchEvent(new Event("change", {bubbles:true})); closePopover(); selectEl.focus(); } }
+        else if(e.key === "Escape"){ e.preventDefault(); closePopover(); selectEl.focus(); }
+      }
+      function setActive(el){ list.querySelectorAll(".pop-item[aria-selected]").forEach(x => x.removeAttribute("aria-selected")); if(el){ el.setAttribute("aria-selected","true"); el.scrollIntoView({block:"nearest"}); } }
+      function handleFilter(){ const q = normalizeText(search.value); const filtered = q ? items.filter(i => normalizeText(i.label).includes(q)) : items.slice(); renderList(filtered); }
+      function renderList(arr){
+        list.innerHTML = "";
+        if(arr.length === 0){ const empty = document.createElement("div"); empty.className="pop-item"; empty.style.cursor="default"; empty.textContent="No matches"; list.appendChild(empty); return; }
+        arr.forEach((it,i) => { const div = document.createElement("div"); div.className="pop-item"; div.textContent=it.label; div.dataset.value=it.value; if(i===0) div.setAttribute("aria-selected","true"); list.appendChild(div); });
+      }
+      selectEl.addEventListener("mousedown", (e) => { if(selectEl.disabled) return; e.preventDefault(); if(pop) closePopover(); else openPopover(); });
+      selectEl.addEventListener("keydown", (e) => { if(selectEl.disabled) return; if(e.key==="ArrowDown"||e.key==="Enter"||e.key===" "){ e.preventDefault(); if(!pop) openPopover(); } });
+    }
+
+    // ---------- FETCH CHOICES ----------
     async function fetchChoices(){
-      const url = CHOICES_URL + "?t=" + Date.now(); // cache-buster
+      const url = CHOICES_URL + "?t=" + Date.now();
       const res = await fetch(url, { method:"GET", cache:"no-store" });
       const text = await res.text();
       if(!res.ok) throw new Error(`HTTP ${res.status}: ${text}`);
@@ -246,31 +606,21 @@
 
         const data = await fetchChoices();
 
-        // Normalize submitters -> [{label, value}]
-        const submitters = Array.isArray(data.submitters)
-          ? data.submitters.map(s => ({ label:String(s.label||"").trim(), value:String(s.value||"").trim() }))
-          : [];
+        const submitters = Array.isArray(data.submitters) ? data.submitters.map(s => ({ label:String(s.label||"").trim(), value:String(s.value||"").trim() })) : [];
+        const clients = Array.isArray(data.clients) ? data.clients.map(c => ({
+          label: String(c.label || c["Matching True Name"] || "").trim(),
+          value: String(c.value || c.listId || c["List ID"] || "").trim(),
+          folderId: String(c.folderId || c["Folder ID"] || "").trim(),
+          ticketId: String(c.ticketId || c["Ticket ID"] || "").trim(),
+          url: String(c.url || c.URL || c["URL"] || c.website || c.Website || c.link || c.Link || "").trim()
+        })) : [];
+        const templates = Array.isArray(data.templates) ? data.templates.map(t => ({
+          label: String(t.label || t.name || t["Matched Template Name"] || "").trim(),
+          value: String(t.value || t.id || t["ID"] || "").trim(),
+          data:  String(t.data  || t["Data"] || "").trim(),
+          due:   String(t.due   || t.dueDates || t["Due Dates"] || t["Due Date"] || "").trim()
+        })) : [];
 
-        // Normalize clients -> [{label, listId/value, folderId, ticketId}]
-        const clients = Array.isArray(data.clients)
-          ? data.clients.map(c => ({
-              label: String(c.label||"").trim(),
-              value: String(c.value || c.listId || "").trim(),
-              folderId: String(c.folderId || "").trim(),
-              ticketId: String(c.ticketId || "").trim()
-            }))
-          : [];
-
-        // Normalize templates -> [{label, value, data}]
-        const templates = Array.isArray(data.templates)
-          ? data.templates.map(t => ({
-              label: String(t.label || t.name || t["Matched Template Name"] || "").trim(),
-              value: String(t.value || t.id || t["ID"] || "").trim(),
-              data:  String(t.data  || t["Data"] || "").trim()
-            }))
-          : [];
-
-        // Dedupe by primary IDs
         const finalSubmitters = dedupeBy(submitters, x => x.value);
         const finalClients    = dedupeBy(clients,    x => x.value);
         const finalTemplates  = dedupeBy(templates,  x => x.value);
@@ -279,10 +629,15 @@
         fillClient(finalClients);
         fillTemplates(finalTemplates);
 
-        // enable UI if at least one row for each
         const ok = finalSubmitters.length && finalClients.length && finalTemplates.length;
         enableForm(!!ok);
         setStatus(ok ? "All data is added." : "Fetched, but no rows found. Add rows in the sheet and try again.");
+
+        byId("client").addEventListener("change", updateClientWebsiteFromSelect);
+        byId("template").addEventListener("change", handleTemplateChange);
+
+        setClientWebsite("");
+        byId("dueDate").value = "";
       }catch(e){
         console.error(e);
         setStatus("Couldn't fetch new data.", true);
@@ -290,33 +645,42 @@
       }
     }
 
-    // ---------- TEMPLATE -> DESCRIPTION AUTOFILL ----------
+    // ---------- TEMPLATE -> DESCRIPTION + DUE ----------
     function handleTemplateChange(){
-      const raw = $("#template").value;
-      if(!raw){ $("#description").value = ""; return; }
+      const raw = byId("template").value;
+      if(!raw){ editor.innerHTML = ""; byId("dueDate").value = ""; return; }
       try{
-        const t = JSON.parse(raw); // { id, name, data }
-        $("#description").value = t.data || "";
+        const t = JSON.parse(raw); // { id, name, data, due }
+        const isHtml = /<\/?[a-z][\s\S]*>/i.test(t.data || "");
+        const html = isHtml ? t.data : escapeHtml(t.data || "").replace(/\n/g,"<br>");
+        editor.innerHTML = html;
+        setAutoDueDate(t.due || "");
       }catch(_){
-        $("#description").value = "";
+        editor.innerHTML = "";
+        byId("dueDate").value = "";
       }
     }
 
     // ---------- SUBMIT ----------
     async function submitForm(e){
       e.preventDefault();
-      const rawSubmitter = $("#submitter").value;
-      const rawClient    = $("#client").value;
-      const rawTemplate  = $("#template").value;
-      if(!rawSubmitter || !rawClient || !rawTemplate){
-        setStatus("Please choose submitter, client, and template.", true);
+      const rawSubmitter = byId("submitter").value;
+      const rawClient    = byId("client").value;
+      const rawTemplate  = byId("template").value;
+      const team         = byId("team").value;
+      if(!rawSubmitter || !rawClient || !rawTemplate || !team){
+        setStatus("Please choose submitter, team, client, and template.", true);
         return;
       }
 
-      const submitter = JSON.parse(rawSubmitter); // { id, name }
-      const client    = JSON.parse(rawClient);    // { name, listId, folderId, ticketId }
-      const template  = JSON.parse(rawTemplate);  // { id, name, data }
-      const description = $("#description").value || "";
+      const submitter = JSON.parse(rawSubmitter);
+      const client    = JSON.parse(rawClient);
+      const template  = JSON.parse(rawTemplate);
+
+      const descriptionHtml = editor.innerHTML || "";
+      byId("description").value = descriptionHtml;
+
+      const dueDateTime = byId("dueDate").value || ""; // YYYY-MM-DDTHH:MM local
 
       setStatus("Submitting ticket…");
       const r = await fetch(TICKET_WEBHOOK_URL, {
@@ -325,34 +689,73 @@
         body: JSON.stringify({
           submitterId: submitter.id,
           submitterName: submitter.name,
+          team: team,
           clientName: client.name,
           clientListId: client.listId,
           clientFolderId: client.folderId,
           clientTicketTemplateId: client.ticketId,
+          clientUrl: client.url || "",
           templateId: template.id,
           templateName: template.name,
-          descriptionText: description
+          dueDateTime: dueDateTime,
+          descriptionText: descriptionHtml,
+          attachments: attachments.map(a => ({ filename: a.name, type: a.type, size: a.size, dataUrl: a.dataUrl })) // separate images
         })
       });
       const body = await r.text();
       setStatus("");
-      $("#result").textContent = `Response ${r.status}:\n\n${body}`;
-
-      /* ADDED: render formatted, clickable output */
+      byId("result").textContent = `Response ${r.status}:\n\n${body}`;
       renderPrettyResponse(body, r.status);
+    }
+
+    // ---------- GALLERY ----------
+    function openAttachmentGallery(startIndex=0){
+      const viewer = byId("imgViewer");
+      const grid   = byId("imgGridModal");
+      viewer.innerHTML = "";
+      grid.innerHTML = "";
+      if(attachments.length === 0){
+        viewer.innerHTML = "<div class='muted'>No images in attachments.</div>";
+      }else{
+        const big = document.createElement("img");
+        big.src = attachments[Math.max(0, Math.min(startIndex, attachments.length-1))].dataUrl;
+        viewer.appendChild(big);
+        attachments.forEach((a, idx) => {
+          const card = document.createElement("div");
+          card.className = "img-card";
+          const thumb = document.createElement("img");
+          thumb.src = a.dataUrl;
+          thumb.addEventListener("click", () => { big.src = a.dataUrl; });
+          card.appendChild(thumb);
+          grid.appendChild(card);
+        });
+      }
+      const modal = byId("imgModal");
+      modal.style.display = "flex";
+      modal.setAttribute("aria-hidden","false");
+    }
+    function closeImageGallery(){
+      const modal = byId("imgModal");
+      modal.style.display = "none";
+      modal.setAttribute("aria-hidden","true");
     }
 
     // ---------- WIRE UP ----------
     document.addEventListener("DOMContentLoaded", () => {
-      enableForm(false); // start disabled; user must click Fetch
-      $("#btnFetch").addEventListener("click", handleFetchNew);
-      $("#template").addEventListener("change", handleTemplateChange);
-      $("#form").addEventListener("submit", submitForm);
+      enhanceSelect(byId("team")); // searchable right away
+
+      enableForm(false);
+      byId("btnFetch").addEventListener("click", handleFetchNew);
+      byId("form").addEventListener("submit", submitForm);
+
+      // RTE buttons
+      byId("btnAddLink").addEventListener("click", insertLink);
+
+      // Gallery / close
+      byId("btnViewAttachments").addEventListener("click", () => openAttachmentGallery(0));
+      byId("btnCloseModal").addEventListener("click", closeImageGallery);
+      byId("imgModal").addEventListener("click", (e) => { if(e.target === byId("imgModal")) closeImageGallery(); });
     });
   </script>
-</body>
-</html>
-<!-- partial -->
-  
 </body>
 </html>
