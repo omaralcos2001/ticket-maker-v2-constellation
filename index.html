@@ -21,6 +21,30 @@
       width: 100%; padding: 10px; font-size: 15px; border-radius: 8px;
       border: 1px solid var(--g-200); background:#fff;
     }
+    /* Fix toolbar buttons so they don’t stretch full width */
+.rte-toolbar button {
+  display: inline-block;
+  width: auto;              /* override width:100% */
+  min-width: 34px;
+  padding: 4px 8px;
+  border: 1px solid var(--g-300);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.rte-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+
+.rte-toolbar button:hover {
+  background: var(--g-100);
+}
     select:focus, button:focus, textarea:focus, input:focus { outline: 2px solid var(--g-500); }
     select[disabled], textarea[disabled], input[disabled] { background: #f3f7f3; color:#6b6b6b; }
     .row { display:flex; gap:12px; margin-top:12px; }
@@ -79,9 +103,10 @@
     }
     .pop-item:hover, .pop-item[aria-selected="true"] { background: var(--g-100); }
 
-    /* Description editor (links only; no images here) */
+    /* RTE: toolbar + editor */
     .rte-toolbar { display:flex; gap:8px; margin:6px 0 8px; flex-wrap: wrap; }
     .rte-toolbar button { padding:6px 10px; font-size:13px; border-radius:6px; border:1px solid var(--g-300); background:#fff; cursor:pointer; }
+    .rte-toolbar button[aria-pressed="true"]{ background: var(--g-100); }
     .rte-box {
       min-height: 160px; padding:10px; border:1px solid var(--g-200); border-radius:8px; background:#fff;
     }
@@ -106,10 +131,7 @@
     .img-card img { width:100%; height:110px; object-fit:cover; display:block; cursor:pointer; }
     .img-remove {
       position:absolute; top:6px; right:6px; background:#fff; border:1px solid var(--g-300);
-      border-radius:8px; padding:2px 8px; font-size:12px; cursor:pointer;
-    }
-
-    /* Image gallery modal */
+      border-radius:8px; padding:2px 8px; font-size:12px; cursor:pointer; }
     .img-modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display:none; align-items: center; justify-content: center; z-index: 10000; }
     .img-panel { background: #fff; border-radius: 12px; padding: 14px; max-width: 960px; width: calc(100% - 32px); max-height: 85vh; overflow: auto; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
     .modal-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
@@ -135,7 +157,6 @@
       </select>
     </div>
 
-    <!-- Team dropdown right below submitter -->
     <div class="section">
       <label for="team">Which team is this from? *</label>
       <div class="select-anchor">
@@ -162,7 +183,6 @@
       </div>
     </div>
 
-    <!-- Client Website -->
     <div class="section">
       <label for="clientUrl">Client Website</label>
       <input id="clientUrl" type="url" placeholder="Auto-filled after you choose a client…" disabled readonly />
@@ -181,21 +201,40 @@
       <div class="muted">Selecting a template will auto-fill the description and due date/time.</div>
     </div>
 
-    <!-- Due Date/Time -->
     <div class="section">
       <label for="dueDate">Due Date & Time</label>
       <input id="dueDate" type="datetime-local" />
       <div class="muted">Auto-fills from template. Supports absolute (e.g., 2025-08-20 14:30) or relative like +8h, 2d 4h 30m.</div>
     </div>
 
-    <!-- Description (links only) -->
+    <!-- DESCRIPTION with RTE -->
     <div class="section">
       <label for="description">Description</label>
+
+      <!-- RTE: toolbar -->
+      <div class="rte-toolbar" id="rteToolbar">
+        <button type="button" data-cmd="bold"><strong>B</strong></button>
+        <button type="button" data-cmd="italic"><em>I</em></button>
+        <button type="button" data-cmd="underline"><u>U</u></button>
+        <button type="button" data-cmd="insertUnorderedList">• Bullets</button>
+        <button type="button" data-cmd="insertOrderedList">1. Numbers</button>
+        <button type="button" data-cmd="formatBlock" data-value="H3">H3</button>
+        <button type="button" data-cmd="formatBlock" data-value="BLOCKQUOTE">Quote</button>
+        <button type="button" data-action="code">Code</button>
+        <button type="button" data-action="link">Link</button>
+        <button type="button" data-action="clear">Clear</button>
+      </div>
+
+      <!-- RTE: contenteditable box -->
       <div id="descriptionEditor" class="rte-box" contenteditable="true" data-placeholder="Template description will appear here after you choose a template…"></div>
+
+      <!-- Hidden textarea that gets the HTML for submit -->
       <textarea id="description" name="description" style="display:none;"></textarea>
+
+      <div class="muted">You can format text: bold, italic, underline, bullets, numbers, H3, quotes, inline code, and links. Images belong in Attachments below.</div>
     </div>
 
-    <!-- Attachments (separate from Description) -->
+    <!-- Attachments -->
     <div class="section">
       <label>Attachments</label>
       <div id="dropzone" class="dropzone" tabindex="0">
@@ -288,7 +327,6 @@
       byId("btnSubmit").disabled = !enabled;
       byId("dueDate").disabled = !enabled ? true : false;
       byId("clientUrl").disabled = !enabled;
-      // Team stays enabled
     }
 
     function option(valObj, labelText){
@@ -361,8 +399,68 @@
       });
     }
 
-    // ---------- RTE (links only) ----------
+    // ---------- RTE CORE ----------
     const editor = byId("descriptionEditor");
+    const toolbar = byId("rteToolbar");
+
+    // safe tags/attrs for sanitizer
+    const ALLOWED_TAGS = new Set(["P","BR","STRONG","B","EM","I","U","UL","OL","LI","A","H3","BLOCKQUOTE","PRE","CODE"]);
+    const ALLOWED_ATTRS = { A: new Set(["href","target","rel"]) };
+
+    function sanitizeUrl(u){
+      try{ const url=new URL(u); if(/^https?:$/.test(url.protocol)) return url.toString(); }catch(_){}
+      return "";
+    }
+
+    // Convert arbitrary HTML to allowed-only HTML
+    function sanitizeHtml(html){
+      const tpl = document.createElement("template");
+      tpl.innerHTML = html;
+      (function walk(node){
+        const children = Array.from(node.childNodes);
+        for(const n of children){
+          if(n.nodeType === 1){ // element
+            if(!ALLOWED_TAGS.has(n.tagName)){
+              // unwrap: keep kids, drop the tag
+              while(n.firstChild) node.insertBefore(n.firstChild, n);
+              node.removeChild(n);
+              continue;
+            }
+            // strip attrs
+            [...n.attributes].forEach(a => {
+              const ok = (ALLOWED_ATTRS[n.tagName] && ALLOWED_ATTRS[n.tagName].has(a.name.toLowerCase()));
+              if(!ok) n.removeAttribute(a.name);
+            });
+            // tighten links
+            if(n.tagName === "A"){
+              const clean = sanitizeUrl(n.getAttribute("href") || "");
+              if(!clean){ n.replaceWith(...n.childNodes); continue; }
+              n.setAttribute("href", clean);
+              n.setAttribute("target","_blank");
+              n.setAttribute("rel","noopener");
+            }
+            walk(n);
+          }else if(n.nodeType === 8){ // comment
+            node.removeChild(n);
+          }
+        }
+      })(tpl.content);
+      // ensure paragraphs around bare text nodes
+      function wrapOrphanText(root){
+        const frag = document.createDocumentFragment();
+        root.childNodes.forEach(ch=>{
+          if(ch.nodeType===3 && ch.nodeValue.trim()){
+            const p = document.createElement("p"); p.textContent = ch.nodeValue; frag.appendChild(p);
+          }else{
+            frag.appendChild(ch);
+          }
+        });
+        root.replaceChildren(frag);
+      }
+      wrapOrphanText(tpl.content);
+      return tpl.innerHTML;
+    }
+
     function insertHtmlAtCursor(html){
       editor.focus();
       if(document.queryCommandSupported && document.queryCommandSupported("insertHTML")){
@@ -377,17 +475,62 @@
         range.collapse(false);
       }
     }
-    function sanitizeUrl(u){
-      try{ const url=new URL(u); if(/^https?:$/.test(url.protocol)) return url.toString(); }catch(_){}
-      return "";
-    }
-    function insertLink(){
-      const href = sanitizeUrl(prompt("Enter URL to link:", "https://"));
-      if(!href) return;
-      insertHtmlAtCursor(`<a href="${href}" target="_blank" rel="noopener">${href}</a>`);
-    }
 
-    // ---------- ATTACHMENTS (separate from description) ----------
+    // Toolbar actions
+    toolbar.addEventListener("click", (e)=>{
+      const btn = e.target.closest("button");
+      if(!btn) return;
+      const cmd = btn.dataset.cmd;
+      const val = btn.dataset.value || null;
+      const action = btn.dataset.action;
+
+      editor.focus();
+
+      if(cmd){
+        document.execCommand(cmd, false, val);
+        return;
+      }
+      if(action === "link"){
+        const href = prompt("Enter URL to link:", "https://");
+        const clean = sanitizeUrl(href || "");
+        if(!clean) return;
+        document.execCommand("createLink", false, clean);
+        // force target=_blank rel=noopener
+        const sel = window.getSelection();
+        if(sel && sel.anchorNode){
+          const a = (sel.anchorNode.parentElement && sel.anchorNode.parentElement.closest("a"));
+          if(a){ a.setAttribute("target","_blank"); a.setAttribute("rel","noopener"); }
+        }
+        return;
+      }
+      if(action === "code"){
+        // toggle PRE/CODE block
+        document.execCommand("formatBlock", false, "PRE");
+        const pre = editor.querySelector("pre");
+        if(pre && !pre.querySelector("code")){
+          const c = document.createElement("code");
+          c.innerHTML = pre.innerHTML;
+          pre.replaceChildren(c);
+        }
+        return;
+      }
+      if(action === "clear"){
+        const plain = editor.textContent || "";
+        editor.innerHTML = sanitizeHtml(plain ? `<p>${escapeHtml(plain).replace(/\n+/g,"</p><p>")}</p>` : "");
+        return;
+      }
+    });
+
+    // sanitize pasted content
+    editor.addEventListener("paste", (e)=>{
+      e.preventDefault();
+      const html = e.clipboardData.getData("text/html");
+      const text = e.clipboardData.getData("text/plain");
+      const safe = sanitizeHtml(html || (text ? `<p>${escapeHtml(text).replace(/\n+/g,"</p><p>")}</p>` : ""));
+      insertHtmlAtCursor(safe);
+    });
+
+    // ---------- ATTACHMENTS ----------
     const attachments = []; // {name, type, size, dataUrl}
 
     function addAttachmentFile(file){
@@ -425,7 +568,6 @@
       });
     }
 
-    // dropzone: click / drag&drop / paste
     const dropzone = byId("dropzone");
     dropzone.addEventListener("click", () => byId("fileImageInput").click());
     dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
@@ -468,7 +610,7 @@
       try{ const c = JSON.parse(raw); setClientWebsite(c.url || ""); }catch(_){ setClientWebsite(""); }
     }
 
-    // ---------- Due Date parsing (supports hours/minutes) ----------
+    // ---------- Due Date parsing ----------
     function two(n){ return String(n).padStart(2,"0"); }
     function toLocalDatetimeValue(date){
       const d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
@@ -652,8 +794,8 @@
       try{
         const t = JSON.parse(raw); // { id, name, data, due }
         const isHtml = /<\/?[a-z][\s\S]*>/i.test(t.data || "");
-        const html = isHtml ? t.data : escapeHtml(t.data || "").replace(/\n/g,"<br>");
-        editor.innerHTML = html;
+        const htmlRaw = isHtml ? t.data : (t.data || "").split("\n").map(line => `<p>${escapeHtml(line)}</p>`).join("");
+        editor.innerHTML = sanitizeHtml(htmlRaw);
         setAutoDueDate(t.due || "");
       }catch(_){
         editor.innerHTML = "";
@@ -677,7 +819,8 @@
       const client    = JSON.parse(rawClient);
       const template  = JSON.parse(rawTemplate);
 
-      const descriptionHtml = editor.innerHTML || "";
+      // sanitize once before sending so n8n gets clean, identical HTML
+      const descriptionHtml = sanitizeHtml(editor.innerHTML || "");
       byId("description").value = descriptionHtml;
 
       const dueDateTime = byId("dueDate").value || ""; // YYYY-MM-DDTHH:MM local
@@ -699,7 +842,7 @@
           templateName: template.name,
           dueDateTime: dueDateTime,
           descriptionText: descriptionHtml,
-          attachments: attachments.map(a => ({ filename: a.name, type: a.type, size: a.size, dataUrl: a.dataUrl })) // separate images
+          attachments: attachments.map(a => ({ filename: a.name, type: a.type, size: a.size, dataUrl: a.dataUrl }))
         })
       });
       const body = await r.text();
@@ -742,13 +885,11 @@
 
     // ---------- WIRE UP ----------
     document.addEventListener("DOMContentLoaded", () => {
-      enhanceSelect(byId("team")); // searchable right away
-
+      enhanceSelect(byId("team"));
       enableForm(false);
       byId("btnFetch").addEventListener("click", handleFetchNew);
       byId("form").addEventListener("submit", submitForm);
 
-      // Gallery / close
       byId("btnViewAttachments").addEventListener("click", () => openAttachmentGallery(0));
       byId("btnCloseModal").addEventListener("click", closeImageGallery);
       byId("imgModal").addEventListener("click", (e) => { if(e.target === byId("imgModal")) closeImageGallery(); });
