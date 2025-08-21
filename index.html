@@ -4,48 +4,27 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Submit a Support Ticket</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root{
       --g-900:#0f3d15; --g-800:#1b5e20; --g-700:#2e7d32; --g-500:#43a047;
       --g-300:#81c784; --g-200:#c8e6c9; --g-100:#e8f5e9; --g-050:#f9fdf9;
     }
+    *{box-sizing:border-box}
     body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      font-family: Montserrat, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       padding: 20px; max-width: 760px; margin: 0 auto;
       background: var(--g-050); color: #1a1a1a;
     }
     h1 { color: var(--g-800); margin-bottom: .4em; }
-    p.intro { margin: 0 0 1.25em; color: var(--g-700); line-height: 1.45; }
+    p.intro { margin: 0 0 1.25em; color: var(--g-700); line-height: 1.5; }
     label { display:block; margin: 12px 0 6px; font-weight: 600; color: var(--g-800); }
     select, button, textarea, input[type="text"], input[type="url"], input[type="date"], input[type="datetime-local"] {
       width: 100%; padding: 10px; font-size: 15px; border-radius: 8px;
       border: 1px solid var(--g-200); background:#fff;
     }
-    /* Fix toolbar buttons so they don’t stretch full width */
-.rte-toolbar button {
-  display: inline-block;
-  width: auto;              /* override width:100% */
-  min-width: 34px;
-  padding: 4px 8px;
-  border: 1px solid var(--g-300);
-  border-radius: 4px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1.2;
-}
-
-.rte-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 6px 0 8px;
-}
-
-.rte-toolbar button:hover {
-  background: var(--g-100);
-}
-    select:focus, button:focus, textarea:focus, input:focus { outline: 2px solid var(--g-500); }
+    select:focus, button:focus, textarea:focus, input:focus { outline: 2px solid var(--g-500); outline-offset: 1px; }
     select[disabled], textarea[disabled], input[disabled] { background: #f3f7f3; color:#6b6b6b; }
     .row { display:flex; gap:12px; margin-top:12px; }
     .row > * { flex:1; min-width: 180px; }
@@ -59,24 +38,32 @@
     }
     button[disabled] { opacity:.6; cursor: not-allowed; }
     .note { font-size: 13px; color: var(--g-700); margin-top: 6px; }
+
+    /* Info + error + success panels */
     .status {
       margin-top: 10px; padding: 10px; border-radius: 8px; border:1px solid var(--g-200); background: var(--g-100);
-      color: var(--g-800); font-size: 14px;
+      color: var(--g-800); font-size: 14px; display:none; white-space:pre-wrap;
     }
     .status.error { border-color:#f2b8b5; background:#fdecea; color:#b3261e; }
-    pre#result {
-      margin-top:16px; background: var(--g-100); padding:12px; border-radius:8px; white-space:pre-wrap; border:1px solid var(--g-200);
+    .success {
+      margin-top: 14px; padding: 12px; border-radius: 10px;
+      border:1px solid #a5d6a7; background:#e8f5e9; color:#1b5e20; display:none;
     }
+    .success strong { display:block; margin-bottom: 6px; }
+
+    /* Webhook response blocks (visible to any submitter) */
+    .resp-wrap { margin-top: 14px; display:none; }
+    .resp-wrap h3 { margin: 0 0 6px; font-size: 16px; color: var(--g-800); }
+    pre#respRaw {
+      margin:0; background: #fff; padding:12px; border-radius:8px;
+      border:1px solid var(--g-200); white-space:pre-wrap; max-height: 360px; overflow:auto;
+    }
+    .resp-pretty { margin-top: 10px; }
+
     .section { margin-top: 18px; padding-top: 6px; border-top: 1px dashed var(--g-200); }
     .muted { color:#517a53; font-size:13px; margin-top:6px; }
 
-    /* Pretty response styling */
-    #resultPretty { margin-top: 10px; }
-    #resultPretty ul { margin: 8px 0 0; padding-left: 18px; }
-    #resultPretty li { margin: 2px 0; }
-    #resultPretty a { text-decoration: underline; }
-
-    /* Popover for searchable dropdown */
+    /* Popover select */
     .select-anchor { position: relative; }
     .pop-wrap {
       position: absolute;
@@ -88,14 +75,7 @@
       box-shadow: 0 10px 30px rgba(0,0,0,.15);
       overflow: hidden;
     }
-    .pop-search {
-      width:100%;
-      border:none;
-      border-bottom:1px solid var(--g-200);
-      padding:10px 12px;
-      font-size:14px;
-      outline:none;
-    }
+    .pop-search { width:100%; border:none; border-bottom:1px solid var(--g-200); padding:10px 12px; font-size:14px; outline:none; }
     .pop-list { max-height: 260px; overflow:auto; padding:6px 0; }
     .pop-item {
       padding:8px 12px; cursor:pointer; font-size:14px; line-height:1.3;
@@ -103,9 +83,13 @@
     }
     .pop-item:hover, .pop-item[aria-selected="true"] { background: var(--g-100); }
 
-    /* RTE: toolbar + editor */
-    .rte-toolbar { display:flex; gap:8px; margin:6px 0 8px; flex-wrap: wrap; }
-    .rte-toolbar button { padding:6px 10px; font-size:13px; border-radius:6px; border:1px solid var(--g-300); background:#fff; cursor:pointer; }
+    /* RTE */
+    .rte-toolbar { display:flex; gap:6px; margin:6px 0 8px; flex-wrap: wrap; }
+    .rte-toolbar button {
+      display:inline-block; width:auto; min-width:34px; padding:4px 8px;
+      border:1px solid var(--g-300); border-radius:6px; background:#fff; cursor:pointer; font-size:14px; line-height:1.2;
+    }
+    .rte-toolbar button:hover { background: var(--g-100); }
     .rte-toolbar button[aria-pressed="true"]{ background: var(--g-100); }
     .rte-box {
       min-height: 160px; padding:10px; border:1px solid var(--g-200); border-radius:8px; background:#fff;
@@ -117,13 +101,8 @@
     /* Attachments */
     .dropzone {
       border: 2px dashed var(--g-300);
-      border-radius: 10px;
-      background: #fff;
-      padding: 16px;
-      text-align: center;
-      color: #517a53;
-      cursor: pointer;
-      user-select: none;
+      border-radius: 10px; background: #fff; padding: 16px; text-align: center;
+      color: #517a53; cursor: pointer; user-select: none;
     }
     .dropzone.dragover { background: var(--g-100); border-color: var(--g-500); }
     .img-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap: 10px; margin-top:10px; }
@@ -131,7 +110,8 @@
     .img-card img { width:100%; height:110px; object-fit:cover; display:block; cursor:pointer; }
     .img-remove {
       position:absolute; top:6px; right:6px; background:#fff; border:1px solid var(--g-300);
-      border-radius:8px; padding:2px 8px; font-size:12px; cursor:pointer; }
+      border-radius:8px; padding:2px 8px; font-size:12px; cursor:pointer;
+    }
     .img-modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display:none; align-items: center; justify-content: center; z-index: 10000; }
     .img-panel { background: #fff; border-radius: 12px; padding: 14px; max-width: 960px; width: calc(100% - 32px); max-height: 85vh; overflow: auto; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
     .modal-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
@@ -143,10 +123,7 @@
 <body>
   <h1>Submit a Support Ticket</h1>
   <p class="intro">
-    Fill out the form below to submit a support request. Your ticket will be
-    automatically created in ClickUp and routed to the correct client workspace
-    using the selected template. Once submitted, you'll receive a link to review
-    and confirm the task.
+    Fill out the form below. Your ticket will be created in ClickUp. After submit, everyone sees the exact webhook response here, including the task link.
   </p>
 
   <form id="form" novalidate>
@@ -204,7 +181,7 @@
     <div class="section">
       <label for="dueDate">Due Date & Time</label>
       <input id="dueDate" type="datetime-local" />
-      <div class="muted">Auto-fills from template. Supports absolute (e.g., 2025-08-20 14:30) or relative like +8h, 2d 4h 30m.</div>
+      <div class="muted">Absolute (YYYY-MM-DD HH:MM) or relative like +8h, 2d 4h 30m.</div>
     </div>
 
     <!-- DESCRIPTION with RTE -->
@@ -231,7 +208,7 @@
       <!-- Hidden textarea that gets the HTML for submit -->
       <textarea id="description" name="description" style="display:none;"></textarea>
 
-      <div class="muted">You can format text: bold, italic, underline, bullets, numbers, H3, quotes, inline code, and links. Images belong in Attachments below.</div>
+      <div class="muted">Format: bold, italic, underline, bullets, numbers, quotes, code, links. Images belong in Attachments below.</div>
     </div>
 
     <!-- Attachments -->
@@ -254,12 +231,17 @@
       <button type="submit" class="primary" id="btnSubmit" disabled>Submit Ticket</button>
     </div>
 
-    <div id="status" class="status" style="display:none;"></div>
-    <div class="note">Click “Fetch new data” to pull the latest rows from Google Sheets.</div>
+    <div id="status" class="status"></div>
+    <div id="success" class="success" role="status" aria-live="polite"></div>
+    <div class="note">If your n8n workflow is OFF, use /webhook-test/ endpoints.</div>
   </form>
 
-  <pre id="result"></pre>
-  <div id="resultPretty" class="status" style="display:none;"></div>
+  <!-- Webhook response (visible to any submitter) -->
+  <div class="resp-wrap" id="respWrap">
+    <h3>Webhook response</h3>
+    <pre id="respRaw"></pre>
+    <div id="respPretty" class="status resp-pretty"></div>
+  </div>
 
   <!-- Image gallery modal -->
   <div id="imgModal" class="img-modal" aria-hidden="true">
@@ -274,13 +256,16 @@
   </div>
 
   <script>
-    // Endpoints
+    // Endpoints (switch to /webhook-test/... if the n8n workflow is OFF)
     const CHOICES_URL        = "https://n8n-14lp.onrender.com/webhook/ticket-choices"; // GET
     const TICKET_WEBHOOK_URL = "https://n8n-14lp.onrender.com/webhook/ticker-maker";   // POST
 
     // ---------- HELPERS ----------
     const $ = s => document.querySelector(s);
     const byId = id => document.getElementById(id);
+
+    function show(el){ el.style.display = "block"; }
+    function hide(el){ el.style.display = "none"; }
 
     function escapeHtml(str){
       return String(str)
@@ -291,12 +276,13 @@
         .replace(/'/g,"&#039;");
     }
     function linkify(str){
-      return str.replace(/(https?:\/\/[^\s"']+)/g, (m) =>
+      return String(str).replace(/(https?:\/\/[^\s"']+)/g, (m) =>
         `<a href="${m}" target="_blank" rel="noopener">${m}</a>`
       );
     }
+
     function renderPrettyResponse(bodyText, statusCode){
-      const box = byId("resultPretty");
+      const box = byId("respPretty");
       let html = `<strong>Response ${statusCode}</strong>`;
       try{
         const obj = JSON.parse(bodyText);
@@ -309,16 +295,73 @@
         html += `<pre style="white-space:pre-wrap;margin:6px 0 0;">${linkify(escapeHtml(bodyText))}</pre>`;
       }
       box.innerHTML = html;
-      box.style.display = "block";
+      show(box);
+      show(byId("respWrap"));
     }
 
     function setStatus(text, isError=false){
       const el = byId("status");
-      if(!text){ el.style.display="none"; el.textContent=""; el.classList.remove("error"); return; }
+      if(!text){ hide(el); el.textContent=""; el.classList.remove("error"); return; }
       el.textContent = text;
       el.classList.toggle("error", !!isError);
-      el.style.display = "block";
+      show(el);
     }
+
+    function setSuccess(objOrText){
+  const el = byId("success");
+
+  // Helper to html-escape & linkify
+  const esc = s => escapeHtml(String(s ?? ''));
+  const aTag = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(text || href)}</a>`;
+
+  let heading = "Task created successfully.";
+  let detailsHtml = "";
+
+  if (typeof objOrText === "string") {
+    // Plain text: show it as the heading
+    heading = objOrText.trim() ? esc(objOrText) : heading;
+  } else if (objOrText && typeof objOrText === "object") {
+    // Optional custom message from webhook
+    if (objOrText.message || objOrText.msg) heading = esc(objOrText.message || objOrText.msg);
+
+    // Normalize common fields from various webhook shapes
+    const assignee = objOrText.assignee || objOrText.assigned_to || objOrText.owner || "";
+    const client   = objOrText.client || objOrText.clientName || objOrText.workspace || "";
+    const taskType = objOrText.taskType || objOrText.templateName || objOrText.type || "";
+    const taskId   = objOrText.taskId || objOrText.id || objOrText.task_id || "";
+    const link     = objOrText.link || objOrText.taskUrl || objOrText.url || objOrText.permalink || "";
+
+    // Build bullet list only for fields that exist
+    const rows = [];
+    if (assignee) rows.push(`<li><strong>assignee:</strong> ${esc(assignee)}</li>`);
+    if (client)   rows.push(`<li><strong>client:</strong> ${esc(client)}</li>`);
+    if (taskType) rows.push(`<li><strong>taskType:</strong> ${esc(taskType)}</li>`);
+    if (link)     rows.push(`<li><strong>link:</strong> ${aTag(link)}</li>`);
+    if (taskId && !link) rows.push(`<li><strong>taskId:</strong> <code>${esc(taskId)}</code></li>`);
+
+    // If none of the common keys exist, show a compact key/value dump (strings only)
+    if (rows.length === 0) {
+      const entries = Object.entries(objOrText)
+        .filter(([_, v]) => typeof v === "string" || typeof v === "number")
+        .slice(0, 10) // keep it short
+        .map(([k, v]) => {
+          const val = String(v);
+          // turn URLs into links
+          return /https?:\/\/\S+/i.test(val)
+            ? `<li><strong>${esc(k)}:</strong> ${aTag(val)}</li>`
+            : `<li><strong>${esc(k)}:</strong> ${esc(val)}</li>`;
+        });
+      if (entries.length) rows.push(...entries);
+    }
+
+    if (rows.length) {
+      detailsHtml = `<ul style="margin:8px 0 0; padding-left:18px;">${rows.join("")}</ul>`;
+    }
+  }
+
+  el.innerHTML = `<strong>${heading}</strong>${detailsHtml}`;
+  show(el);
+}
 
     function enableForm(enabled){
       byId("submitter").disabled = !enabled;
@@ -403,8 +446,11 @@
     const editor = byId("descriptionEditor");
     const toolbar = byId("rteToolbar");
 
-    // safe tags/attrs for sanitizer
-    const ALLOWED_TAGS = new Set(["P","BR","STRONG","B","EM","I","U","UL","OL","LI","A","H3","BLOCKQUOTE","PRE","CODE"]);
+    // allow tags + normalize headings to <p><b>..</b></p> so nothing is lost
+    const ALLOWED_TAGS = new Set([
+      "P","BR","STRONG","B","EM","I","U","UL","OL","LI","A",
+      "H1","H2","H3","H4","H5","H6","BLOCKQUOTE","PRE","CODE"
+    ]);
     const ALLOWED_ATTRS = { A: new Set(["href","target","rel"]) };
 
     function sanitizeUrl(u){
@@ -412,26 +458,22 @@
       return "";
     }
 
-    // Convert arbitrary HTML to allowed-only HTML
     function sanitizeHtml(html){
       const tpl = document.createElement("template");
       tpl.innerHTML = html;
       (function walk(node){
         const children = Array.from(node.childNodes);
         for(const n of children){
-          if(n.nodeType === 1){ // element
+          if(n.nodeType === 1){
             if(!ALLOWED_TAGS.has(n.tagName)){
-              // unwrap: keep kids, drop the tag
               while(n.firstChild) node.insertBefore(n.firstChild, n);
               node.removeChild(n);
               continue;
             }
-            // strip attrs
             [...n.attributes].forEach(a => {
               const ok = (ALLOWED_ATTRS[n.tagName] && ALLOWED_ATTRS[n.tagName].has(a.name.toLowerCase()));
               if(!ok) n.removeAttribute(a.name);
             });
-            // tighten links
             if(n.tagName === "A"){
               const clean = sanitizeUrl(n.getAttribute("href") || "");
               if(!clean){ n.replaceWith(...n.childNodes); continue; }
@@ -440,13 +482,14 @@
               n.setAttribute("rel","noopener");
             }
             walk(n);
-          }else if(n.nodeType === 8){ // comment
+          }else if(n.nodeType === 8){
             node.removeChild(n);
           }
         }
       })(tpl.content);
-      // ensure paragraphs around bare text nodes
-      function wrapOrphanText(root){
+
+      // wrap bare text into <p>
+      (function wrapOrphanText(root){
         const frag = document.createDocumentFragment();
         root.childNodes.forEach(ch=>{
           if(ch.nodeType===3 && ch.nodeValue.trim()){
@@ -456,10 +499,42 @@
           }
         });
         root.replaceChildren(frag);
-      }
-      wrapOrphanText(tpl.content);
+      })(tpl.content);
+
+      // normalize headings → <p><b>…</b></p>
+      tpl.content.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
+        const p = document.createElement('p');
+        const b = document.createElement('b');
+        b.textContent = h.textContent;
+        p.appendChild(b);
+        h.replaceWith(p);
+      });
+
       return tpl.innerHTML;
     }
+
+    // Enter key: Shift+Enter => <br>, Enter => new paragraph
+    editor.addEventListener("keydown", (e) => {
+      if(e.key === "Enter"){
+        e.preventDefault();
+        if(e.shiftKey){
+          document.execCommand("insertLineBreak");
+          return;
+        }
+        const sel = window.getSelection();
+        if(!sel || !sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        const p = document.createElement("p");
+        p.innerHTML = "<br>";
+        range.collapse(false);
+        range.insertNode(p);
+        const newRange = document.createRange();
+        newRange.setStart(p, 0);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      }
+    });
 
     function insertHtmlAtCursor(html){
       editor.focus();
@@ -476,7 +551,6 @@
       }
     }
 
-    // Toolbar actions
     toolbar.addEventListener("click", (e)=>{
       const btn = e.target.closest("button");
       if(!btn) return;
@@ -487,7 +561,13 @@
       editor.focus();
 
       if(cmd){
-        document.execCommand(cmd, false, val);
+        if(cmd === "formatBlock" && val){
+          // Chromium prefers angle-bracket form
+          const tag = val === "H3" ? "<h3>" : val;
+          document.execCommand("formatBlock", false, tag);
+        }else{
+          document.execCommand(cmd, false, val);
+        }
         return;
       }
       if(action === "link"){
@@ -495,7 +575,6 @@
         const clean = sanitizeUrl(href || "");
         if(!clean) return;
         document.execCommand("createLink", false, clean);
-        // force target=_blank rel=noopener
         const sel = window.getSelection();
         if(sel && sel.anchorNode){
           const a = (sel.anchorNode.parentElement && sel.anchorNode.parentElement.closest("a"));
@@ -504,7 +583,6 @@
         return;
       }
       if(action === "code"){
-        // toggle PRE/CODE block
         document.execCommand("formatBlock", false, "PRE");
         const pre = editor.querySelector("pre");
         if(pre && !pre.querySelector("code")){
@@ -530,7 +608,7 @@
       insertHtmlAtCursor(safe);
     });
 
-    // ---------- ATTACHMENTS ----------
+    // ---------- Attachments ----------
     const attachments = []; // {name, type, size, dataUrl}
 
     function addAttachmentFile(file){
@@ -601,8 +679,8 @@
       const wrap = byId("clientUrlLinkWrap");
       const link = byId("clientUrlLink");
       input.value = url || "";
-      if(url){ wrap.style.display = "block"; link.href = url; }
-      else   { wrap.style.display = "none"; }
+      if(url){ show(wrap); link.href = url; }
+      else   { hide(wrap); }
     }
     function updateClientWebsiteFromSelect(){
       const raw = byId("client").value;
@@ -733,17 +811,32 @@
 
     // ---------- FETCH CHOICES ----------
     async function fetchChoices(){
+      // If your workflow is OFF, point CHOICES_URL to /webhook-test/...
       const url = CHOICES_URL + "?t=" + Date.now();
-      const res = await fetch(url, { method:"GET", cache:"no-store" });
-      const text = await res.text();
-      if(!res.ok) throw new Error(`HTTP ${res.status}: ${text}`);
-      let data; try { data = JSON.parse(text); } catch(e){ throw new Error("Invalid JSON: " + text); }
+      let res, text;
+      try {
+        res = await fetch(url, { method:"GET", cache:"no-store" });
+      } catch (netErr) {
+        throw new Error("Network error or CORS. " + String(netErr));
+      }
+      try {
+        text = await res.text();
+      } catch {
+        throw new Error(`HTTP ${res?.status || "?"} - failed reading response body.`);
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status} from CHOICES_URL.\nBody:\n${text}`);
+      let data;
+      try { data = JSON.parse(text); }
+      catch { throw new Error(`Invalid JSON from CHOICES_URL.\nBody was:\n${text}`); }
       return data;
     }
 
     async function handleFetchNew(){
       try{
         setStatus("Fetching latest data…");
+        hide(byId("success"));
+        hide(byId("respPretty"));
+        hide(byId("respWrap"));
         enableForm(false);
 
         const data = await fetchChoices();
@@ -782,8 +875,11 @@
         byId("dueDate").value = "";
       }catch(e){
         console.error(e);
-        setStatus("Couldn't fetch new data.", true);
-        enableForm(false);
+        setStatus("Couldn't fetch new data.\n" + String(e.message || e), true);
+        // Show diagnostic for anyone
+        const raw = byId("respRaw");
+        raw.textContent = String(e.stack || e.message || e);
+        show(byId("respWrap"));
       }
     }
 
@@ -803,53 +899,114 @@
       }
     }
 
-    // ---------- SUBMIT ----------
-    async function submitForm(e){
-      e.preventDefault();
-      const rawSubmitter = byId("submitter").value;
-      const rawClient    = byId("client").value;
-      const rawTemplate  = byId("template").value;
-      const team         = byId("team").value;
-      if(!rawSubmitter || !rawClient || !rawTemplate || !team){
-        setStatus("Please choose submitter, team, client, and template.", true);
-        return;
+   // ---------- SUBMIT ----------
+async function submitForm(e){
+  e.preventDefault();
+  hide(byId("success"));
+  hide(byId("respPretty"));
+  hide(byId("respWrap"));
+
+  const rawSubmitter = byId("submitter").value;
+  const rawClient    = byId("client").value;
+  const rawTemplate  = byId("template").value;
+  const team         = byId("team").value;
+  if(!rawSubmitter || !rawClient || !rawTemplate || !team){
+    setStatus("Please choose submitter, team, client, and template.", true);
+    return;
+  }
+
+  const submitter = JSON.parse(rawSubmitter);
+  const client    = JSON.parse(rawClient);
+  const template  = JSON.parse(rawTemplate);
+
+  // Normalize + sanitize editor HTML so ClickUp gets exactly what you typed
+  // === Build 3 parallel versions of the description ===
+// 1) Raw HTML as typed (max fidelity)
+const htmlRaw = editor.innerHTML || "";
+
+// 2) Safe HTML (lightly sanitized, but keep structure)
+const htmlSafe = sanitizeHtml(htmlRaw);
+
+// 3) Plain text and Markdown fallbacks
+const textPlain = editor.innerText || editor.textContent || "";
+const markdown  = htmlSafe
+  .replace(/<\s*h[1-6]\s*>/gi, '\n\n**')
+  .replace(/<\s*\/\s*h[1-6]\s*>/gi, '**\n\n')
+  .replace(/<\s*li\s*>/gi, '\n- ')
+  .replace(/<\s*\/\s*li\s*>/gi, '')
+  .replace(/<\s*br\s*\/?>/gi, '\n')
+  .replace(/<\/p>/gi, '\n\n')
+  .replace(/<[^>]+>/g, '')
+  .trim();
+
+// Put one into the hidden <textarea> (use the safe HTML)
+byId("description").value = htmlSafe;
+
+// Optional: show what we're about to send (helps debugging)
+byId("respRaw").textContent =
+  `HTML length: ${htmlSafe.length}\n` +
+  `MD length:   ${markdown.length}\n` +
+  `TXT length:  ${textPlain.length}\n\n` +
+  `HTML preview:\n${htmlSafe}\n`;
+show(byId("respWrap"));
+
+  const dueDateTime = byId("dueDate").value || "";
+
+  // (Optional) show exactly what we are sending so you can verify both paragraphs exist
+
+  setStatus("Submitting ticket…");
+  try {
+    const r = await fetch(TICKET_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        submitterId: submitter.id,
+        submitterName: submitter.name,
+        team,
+        clientName: client.name,
+        clientListId: client.listId,
+        clientFolderId: client.folderId,
+        clientTicketTemplateId: client.ticketId,
+        clientUrl: client.url || "",
+        templateId: template.id,
+        templateName: template.name,
+        dueDateTime,
+        // ✅ Send ONE canonical description field (HTML only)
+        descriptionHtml: htmlSafe,     // preferred cleaned HTML
+        descriptionHtmlRaw: htmlRaw,   // exact keystrokes from editor
+        descriptionMarkdown: markdown, // markdown fallback
+        descriptionText: textPlain,    // plain text fallback
+        attachments: attachments.map(a => ({
+          filename: a.name, type: a.type, size: a.size, dataUrl: a.dataUrl
+        }))
+      })
+    });
+
+    const body = await r.text();
+    setStatus("");
+
+    // Show server response to the user
+    byId("respRaw").textContent = `HTTP ${r.status}\n\n${body}`;
+    show(byId("respWrap"));
+    renderPrettyResponse(body, r.status);
+
+    if (r.ok) {
+      try {
+        const obj = JSON.parse(body);
+        setSuccess(obj);
+      } catch {
+        setSuccess(body || "Task created successfully.");
       }
-
-      const submitter = JSON.parse(rawSubmitter);
-      const client    = JSON.parse(rawClient);
-      const template  = JSON.parse(rawTemplate);
-
-      // sanitize once before sending so n8n gets clean, identical HTML
-      const descriptionHtml = sanitizeHtml(editor.innerHTML || "");
-      byId("description").value = descriptionHtml;
-
-      const dueDateTime = byId("dueDate").value || ""; // YYYY-MM-DDTHH:MM local
-
-      setStatus("Submitting ticket…");
-      const r = await fetch(TICKET_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submitterId: submitter.id,
-          submitterName: submitter.name,
-          team: team,
-          clientName: client.name,
-          clientListId: client.listId,
-          clientFolderId: client.folderId,
-          clientTicketTemplateId: client.ticketId,
-          clientUrl: client.url || "",
-          templateId: template.id,
-          templateName: template.name,
-          dueDateTime: dueDateTime,
-          descriptionText: descriptionHtml,
-          attachments: attachments.map(a => ({ filename: a.name, type: a.type, size: a.size, dataUrl: a.dataUrl }))
-        })
-      });
-      const body = await r.text();
-      setStatus("");
-      byId("result").textContent = `Response ${r.status}:\n\n${body}`;
-      renderPrettyResponse(body, r.status);
+    } else {
+      setStatus(`There was a problem. HTTP ${r.status}`, true);
     }
+  } catch (err) {
+    console.error(err);
+    setStatus("Network error while submitting ticket.\n" + String(err), true);
+    byId("respRaw").textContent = String(err.stack || err);
+    show(byId("respWrap"));
+  }
+}
 
     // ---------- GALLERY ----------
     function openAttachmentGallery(startIndex=0){
@@ -889,7 +1046,6 @@
       enableForm(false);
       byId("btnFetch").addEventListener("click", handleFetchNew);
       byId("form").addEventListener("submit", submitForm);
-
       byId("btnViewAttachments").addEventListener("click", () => openAttachmentGallery(0));
       byId("btnCloseModal").addEventListener("click", closeImageGallery);
       byId("imgModal").addEventListener("click", (e) => { if(e.target === byId("imgModal")) closeImageGallery(); });
