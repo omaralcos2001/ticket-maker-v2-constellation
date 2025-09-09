@@ -178,6 +178,13 @@
       <div class="muted">Selecting a template will auto-fill the description and due date/time.</div>
     </div>
 
+    <!-- Task Title (auto-filled from template, but editable) -->
+    <div class="section">
+      <label for="taskTitle">Task Title</label>
+      <input id="taskTitle" name="taskTitle" type="text" placeholder="Auto-filled from template…" />
+      <div class="muted">This title is auto-filled from the selected template. You can edit it if needed.</div>
+    </div>
+
     <div class="section">
       <label for="dueDate">Due Date & Time</label>
       <input id="dueDate" type="datetime-local" />
@@ -883,19 +890,30 @@
       }
     }
 
-    // ---------- TEMPLATE -> DESCRIPTION + DUE ----------
+    // ---------- TEMPLATE -> DESCRIPTION + DUE (+ TITLE) ----------
     function handleTemplateChange(){
       const raw = byId("template").value;
-      if(!raw){ editor.innerHTML = ""; byId("dueDate").value = ""; return; }
+      if(!raw){
+        editor.innerHTML = "";
+        byId("dueDate").value = "";
+        const tt = byId("taskTitle");
+        if (tt) tt.value = "";
+        return;
+      }
       try{
         const t = JSON.parse(raw); // { id, name, data, due }
         const isHtml = /<\/?[a-z][\s\S]*>/i.test(t.data || "");
         const htmlRaw = isHtml ? t.data : (t.data || "").split("\n").map(line => `<p>${escapeHtml(line)}</p>`).join("");
         editor.innerHTML = sanitizeHtml(htmlRaw);
         setAutoDueDate(t.due || "");
+
+        const tt = byId("taskTitle");
+        if (tt) tt.value = (t.name || "").toString().trim();
       }catch(_){
         editor.innerHTML = "";
         byId("dueDate").value = "";
+        const tt = byId("taskTitle");
+        if (tt) tt.value = "";
       }
     }
 
@@ -910,6 +928,7 @@ async function submitForm(e){
   const rawClient    = byId("client").value;
   const rawTemplate  = byId("template").value;
   const team         = byId("team").value;
+  const taskTitle    = (byId("taskTitle")?.value || "").trim(); // NEW
   if(!rawSubmitter || !rawClient || !rawTemplate || !team){
     setStatus("Please choose submitter, team, client, and template.", true);
     return;
@@ -970,6 +989,7 @@ show(byId("respWrap"));
         clientUrl: client.url || "",
         templateId: template.id,
         templateName: template.name,
+        taskTitle: taskTitle || (template.name || ""), // NEW
         dueDateTime,
         // ✅ Send ONE canonical description field (HTML only)
         descriptionHtml: htmlSafe,     // preferred cleaned HTML
