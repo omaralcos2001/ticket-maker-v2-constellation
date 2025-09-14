@@ -20,7 +20,7 @@
     h1 { color: var(--g-800); margin-bottom: .4em; }
     p.intro { margin: 0 0 1.25em; color: var(--g-700); line-height: 1.5; }
     label { display:block; margin: 12px 0 6px; font-weight: 600; color: var(--g-800); }
-    select, button, textarea, input[type="text"], input[type="url"], input[type="date"], input[type="datetime-local"] {
+    select, button, textarea, input[type="text"], input[type="url"], input[type="datetime-local"] {
       width: 100%; padding: 10px; font-size: 15px; border-radius: 8px;
       border: 1px solid var(--g-200); background:#fff;
     }
@@ -29,8 +29,7 @@
     .row { display:flex; gap:12px; margin-top:12px; }
     .row > * { flex:1; min-width: 180px; }
     button.primary {
-      background: var(--g-700); color: #fff; border: none; font-weight: 700; cursor: pointer;
-      transition: background .18s;
+      background: var(--g-700); color: #fff; border: none; font-weight: 700; cursor: pointer; transition: background .18s;
     }
     button.primary:hover { background: var(--g-800); }
     button.ghost {
@@ -51,8 +50,8 @@
     }
     .success strong { display:block; margin-bottom: 6px; }
 
-    /* Webhook response blocks (visible to any submitter) */
-    .resp-wrap { margin-top: 14px; display:none; }
+    /* RAW webhook viewer (kept for debugging but hidden for users) */
+    .resp-wrap { margin-top: 14px; display:none !important; }
     .resp-wrap h3 { margin: 0 0 6px; font-size: 16px; color: var(--g-800); }
     pre#respRaw {
       margin:0; background: #fff; padding:12px; border-radius:8px;
@@ -69,8 +68,7 @@
       position: absolute;
       z-index: 9999;
       width: var(--pop-width, 100%);
-      background:#fff;
-      border:1px solid var(--g-200);
+      background:#fff; border:1px solid var(--g-200);
       border-radius: 10px;
       box-shadow: 0 10px 30px rgba(0,0,0,.15);
       overflow: hidden;
@@ -118,6 +116,20 @@
     .modal-top button { border:1px solid var(--g-300); background:#fff; border-radius:8px; padding:6px 10px; cursor:pointer; }
     .img-viewer { display:flex; justify-content:center; margin-bottom:12px; }
     .img-viewer img { max-width:100%; max-height:60vh; border-radius:10px; }
+
+    /* Subtask table */
+    table.subtask-table { width:100%; border-collapse: collapse; margin-top:8px; table-layout:fixed; }
+    .subtask-table th, .subtask-table td { border:1px solid var(--g-200); padding:8px; background:#fff; vertical-align: top; }
+    .subtask-table th { background: var(--g-100); text-align:left; color: var(--g-800); }
+    .subtask-table td:nth-child(1){ width:18%; }
+    .subtask-table td:nth-child(2){ width:36%; word-wrap:break-word; overflow-wrap: anywhere; }
+    .subtask-table td:nth-child(3){ width:22%; }
+    .subtask-table td:nth-child(4){ width:24%; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    .time-input { width:100%; padding:8px; border:1px solid var(--g-200); border-radius:8px; }
+    .time-hint { font-size:12px; color:#517a53; margin-top:4px; }
+    .time-input.invalid { border-color:#f2b8b5; background:#fff8f8; }
   </style>
 </head>
 <body>
@@ -178,7 +190,7 @@
       <div class="muted">Selecting a template will auto-fill the description and due date/time.</div>
     </div>
 
-    <!-- Task Title (auto-filled from template, but editable) -->
+    <!-- Task Title -->
     <div class="section">
       <label for="taskTitle">Task Title</label>
       <input id="taskTitle" name="taskTitle" type="text" placeholder="Auto-filled from template…" />
@@ -191,11 +203,10 @@
       <div class="muted">Absolute (YYYY-MM-DD HH:MM) or relative like +8h, 2d 4h 30m.</div>
     </div>
 
-    <!-- DESCRIPTION with RTE -->
+    <!-- DESCRIPTION -->
     <div class="section">
       <label for="description">Description</label>
 
-      <!-- RTE: toolbar -->
       <div class="rte-toolbar" id="rteToolbar">
         <button type="button" data-cmd="bold"><strong>B</strong></button>
         <button type="button" data-cmd="italic"><em>I</em></button>
@@ -209,28 +220,22 @@
         <button type="button" data-action="clear">Clear</button>
       </div>
 
-      <!-- RTE: contenteditable box -->
       <div id="descriptionEditor" class="rte-box" contenteditable="true" data-placeholder="Template description will appear here after you choose a template…"></div>
-
-      <!-- Hidden textarea that gets the HTML for submit -->
       <textarea id="description" name="description" style="display:none;"></textarea>
 
-      <div class="muted">Format: bold, italic, underline, bullets, numbers, quotes, code, links. Images belong in Attachments below.</div>
+      <div class="muted">Images belong in Attachments below.</div>
     </div>
 
     <!-- Attachments -->
     <div class="section">
       <label>Attachments</label>
-      <div id="dropzone" class="dropzone" tabindex="0">
-        Click to upload, or drag & drop / paste images here
-      </div>
+      <div id="dropzone" class="dropzone" tabindex="0">Click to upload, or drag & drop / paste images here</div>
       <div class="img-grid" id="attachGrid"></div>
       <input type="file" id="fileImageInput" accept="image/*" multiple style="display:none" />
       <div class="row">
         <button type="button" id="btnUploadImage" class="ghost">Upload Image</button>
         <button type="button" id="btnViewAttachments" class="ghost">View Images</button>
       </div>
-      <div class="muted">Images are stored as separate attachments (not inside the description).</div>
     </div>
 
     <div class="row">
@@ -241,9 +246,22 @@
     <div id="status" class="status"></div>
     <div id="success" class="success" role="status" aria-live="polite"></div>
     <div class="note">If your n8n workflow is OFF, use /webhook-test/ endpoints.</div>
+
+    <!-- Subtask Assignee -->
+    <div id="assigneeSection" class="section" style="display:none;">
+      <h3 style="margin:0 0 6px; color:var(--g-800);">Subtask Assignee</h3>
+      <div class="muted">Pick an assignee and estimate for each subtask, then click <em>Assign</em>. (Client, Task Type, and Link are captured but hidden.)</div>
+      <div id="assigneeTableWrap"></div>
+      <div class="row" style="margin-top:12px;">
+        <button type="button" id="btnAssign" class="primary">Assign</button>
+      </div>
+    </div>
+
+    <!-- Clean assignment/create result (ONLY the data returned by Respond to Webhook) -->
+    <div id="assignResult" class="success" style="display:none;"></div>
   </form>
 
-  <!-- Webhook response (visible to any submitter) -->
+  <!-- Raw webhook viewer (hidden for users; kept for debugging) -->
   <div class="resp-wrap" id="respWrap">
     <h3>Webhook response</h3>
     <pre id="respRaw"></pre>
@@ -263,29 +281,26 @@
   </div>
 
   <script>
-    // Endpoints (switch to /webhook-test/... if the n8n workflow is OFF)
-    const CHOICES_URL        = "https://n8n-14lp.onrender.com/webhook/ticket-choices"; // GET
-    const TICKET_WEBHOOK_URL = "https://n8n-14lp.onrender.com/webhook/ticker-maker";   // POST
+    /* Endpoints */
+    const CHOICES_URL         = "https://n8n-14lp.onrender.com/webhook/ticket-choices"; // GET
+    const TICKET_WEBHOOK_URL  = "https://n8n-14lp.onrender.com/webhook/ticker-maker";   // POST
+    const SUBTASK_WEBHOOK_URL = "https://n8n-14lp.onrender.com/webhook/ticker-subtask"; // POST on Assign
 
-    // ---------- HELPERS ----------
+    /* Hidden debug toggle for raw webhook area */
+    const SHOW_DEBUG = false;
+
     const $ = s => document.querySelector(s);
     const byId = id => document.getElementById(id);
-
-    function show(el){ el.style.display = "block"; }
-    function hide(el){ el.style.display = "none"; }
+    const show = el => { el.style.display = "block"; };
+    const hide = el => { el.style.display = "none"; };
 
     function escapeHtml(str){
       return String(str)
-        .replace(/&/g,"&amp;")
-        .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
-        .replace(/"/g,"&quot;")
-        .replace(/'/g,"&#039;");
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
     }
     function linkify(str){
-      return String(str).replace(/(https?:\/\/[^\s"']+)/g, (m) =>
-        `<a href="${m}" target="_blank" rel="noopener">${m}</a>`
-      );
+      return String(str).replace(/(https?:\/\/[^\s"']+)/g, m => `<a href="${m}" target="_blank" rel="noopener">${m}</a>`);
     }
 
     function renderPrettyResponse(bodyText, statusCode){
@@ -302,8 +317,7 @@
         html += `<pre style="white-space:pre-wrap;margin:6px 0 0;">${linkify(escapeHtml(bodyText))}</pre>`;
       }
       box.innerHTML = html;
-      show(box);
-      show(byId("respWrap"));
+      if (SHOW_DEBUG) { show(box); show(byId("respWrap")); }
     }
 
     function setStatus(text, isError=false){
@@ -314,61 +328,11 @@
       show(el);
     }
 
-    function setSuccess(objOrText){
-  const el = byId("success");
-
-  // Helper to html-escape & linkify
-  const esc = s => escapeHtml(String(s ?? ''));
-  const aTag = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(text || href)}</a>`;
-
-  let heading = "Task created successfully.";
-  let detailsHtml = "";
-
-  if (typeof objOrText === "string") {
-    // Plain text: show it as the heading
-    heading = objOrText.trim() ? esc(objOrText) : heading;
-  } else if (objOrText && typeof objOrText === "object") {
-    // Optional custom message from webhook
-    if (objOrText.message || objOrText.msg) heading = esc(objOrText.message || objOrText.msg);
-
-    // Normalize common fields from various webhook shapes
-    const assignee = objOrText.assignee || objOrText.assigned_to || objOrText.owner || "";
-    const client   = objOrText.client || objOrText.clientName || objOrText.workspace || "";
-    const taskType = objOrText.taskType || objOrText.templateName || objOrText.type || "";
-    const taskId   = objOrText.taskId || objOrText.id || objOrText.task_id || "";
-    const link     = objOrText.link || objOrText.taskUrl || objOrText.url || objOrText.permalink || "";
-
-    // Build bullet list only for fields that exist
-    const rows = [];
-    if (assignee) rows.push(`<li><strong>assignee:</strong> ${esc(assignee)}</li>`);
-    if (client)   rows.push(`<li><strong>client:</strong> ${esc(client)}</li>`);
-    if (taskType) rows.push(`<li><strong>taskType:</strong> ${esc(taskType)}</li>`);
-    if (link)     rows.push(`<li><strong>link:</strong> ${aTag(link)}</li>`);
-    if (taskId && !link) rows.push(`<li><strong>taskId:</strong> <code>${esc(taskId)}</code></li>`);
-
-    // If none of the common keys exist, show a compact key/value dump (strings only)
-    if (rows.length === 0) {
-      const entries = Object.entries(objOrText)
-        .filter(([_, v]) => typeof v === "string" || typeof v === "number")
-        .slice(0, 10) // keep it short
-        .map(([k, v]) => {
-          const val = String(v);
-          // turn URLs into links
-          return /https?:\/\/\S+/i.test(val)
-            ? `<li><strong>${esc(k)}:</strong> ${aTag(val)}</li>`
-            : `<li><strong>${esc(k)}:</strong> ${esc(val)}</li>`;
-        });
-      if (entries.length) rows.push(...entries);
+    function setSuccess(text){
+      const el = byId("success");
+      el.innerHTML = `<strong>${escapeHtml(text || "Task created successfully.")}</strong>`;
+      show(el);
     }
-
-    if (rows.length) {
-      detailsHtml = `<ul style="margin:8px 0 0; padding-left:18px;">${rows.join("")}</ul>`;
-    }
-  }
-
-  el.innerHTML = `<strong>${heading}</strong>${detailsHtml}`;
-  show(el);
-}
 
     function enableForm(enabled){
       byId("submitter").disabled = !enabled;
@@ -386,7 +350,7 @@
       return opt;
     }
 
-    // ---------- SELECT FILL ----------
+    /* ---------- SELECT FILL ---------- */
     function fillSubmitter(items){
       const el = byId("submitter");
       el.innerHTML = "";
@@ -449,141 +413,43 @@
       });
     }
 
-    // ---------- RTE CORE ----------
+    /* ---------- RTE ---------- */
     const editor = byId("descriptionEditor");
     const toolbar = byId("rteToolbar");
-
-    // allow tags + normalize headings to <p><b>..</b></p> so nothing is lost
-    const ALLOWED_TAGS = new Set([
-      "P","BR","STRONG","B","EM","I","U","UL","OL","LI","A",
-      "H1","H2","H3","H4","H5","H6","BLOCKQUOTE","PRE","CODE"
-    ]);
+    const ALLOWED_TAGS = new Set(["P","BR","STRONG","B","EM","I","U","UL","OL","LI","A","H1","H2","H3","H4","H5","H6","BLOCKQUOTE","PRE","CODE"]);
     const ALLOWED_ATTRS = { A: new Set(["href","target","rel"]) };
 
-    function sanitizeUrl(u){
-      try{ const url=new URL(u); if(/^https?:$/.test(url.protocol)) return url.toString(); }catch(_){}
-      return "";
-    }
-
+    function sanitizeUrl(u){ try{ const url=new URL(u); if(/^https?:$/.test(url.protocol)) return url.toString(); }catch(_){ } return ""; }
     function sanitizeHtml(html){
-      const tpl = document.createElement("template");
-      tpl.innerHTML = html;
+      const tpl = document.createElement("template"); tpl.innerHTML = html;
       (function walk(node){
-        const children = Array.from(node.childNodes);
-        for(const n of children){
-          if(n.nodeType === 1){
-            if(!ALLOWED_TAGS.has(n.tagName)){
-              while(n.firstChild) node.insertBefore(n.firstChild, n);
-              node.removeChild(n);
-              continue;
-            }
-            [...n.attributes].forEach(a => {
-              const ok = (ALLOWED_ATTRS[n.tagName] && ALLOWED_ATTRS[n.tagName].has(a.name.toLowerCase()));
-              if(!ok) n.removeAttribute(a.name);
-            });
-            if(n.tagName === "A"){
-              const clean = sanitizeUrl(n.getAttribute("href") || "");
-              if(!clean){ n.replaceWith(...n.childNodes); continue; }
-              n.setAttribute("href", clean);
-              n.setAttribute("target","_blank");
-              n.setAttribute("rel","noopener");
-            }
+        const kids = Array.from(node.childNodes);
+        for(const n of kids){
+          if(n.nodeType===1){
+            if(!ALLOWED_TAGS.has(n.tagName)){ while(n.firstChild) node.insertBefore(n.firstChild,n); node.removeChild(n); continue; }
+            [...n.attributes].forEach(a=>{ const ok=(ALLOWED_ATTRS[n.tagName]&&ALLOWED_ATTRS[n.tagName].has(a.name.toLowerCase())); if(!ok) n.removeAttribute(a.name); });
+            if(n.tagName==="A"){ const clean=sanitizeUrl(n.getAttribute("href")||""); if(!clean){ n.replaceWith(...n.childNodes); continue; } n.setAttribute("href",clean); n.setAttribute("target","_blank"); n.setAttribute("rel","noopener"); }
             walk(n);
-          }else if(n.nodeType === 8){
-            node.removeChild(n);
-          }
+          }else if(n.nodeType===8){ node.removeChild(n); }
         }
       })(tpl.content);
-
-      // wrap bare text into <p>
-      (function wrapOrphanText(root){
-        const frag = document.createDocumentFragment();
-        root.childNodes.forEach(ch=>{
-          if(ch.nodeType===3 && ch.nodeValue.trim()){
-            const p = document.createElement("p"); p.textContent = ch.nodeValue; frag.appendChild(p);
-          }else{
-            frag.appendChild(ch);
-          }
-        });
-        root.replaceChildren(frag);
-      })(tpl.content);
-
-      // normalize headings → <p><b>…</b></p>
-      tpl.content.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
-        const p = document.createElement('p');
-        const b = document.createElement('b');
-        b.textContent = h.textContent;
-        p.appendChild(b);
-        h.replaceWith(p);
-      });
-
+      tpl.content.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h=>{ const p=document.createElement('p'); const b=document.createElement('b'); b.textContent=h.textContent; p.appendChild(b); h.replaceWith(p); });
       return tpl.innerHTML;
     }
 
-    // Enter key: Shift+Enter => <br>, Enter => new paragraph
-    editor.addEventListener("keydown", (e) => {
-      if(e.key === "Enter"){
-        e.preventDefault();
-        if(e.shiftKey){
-          document.execCommand("insertLineBreak");
-          return;
-        }
-        const sel = window.getSelection();
-        if(!sel || !sel.rangeCount) return;
-        const range = sel.getRangeAt(0);
-        const p = document.createElement("p");
-        p.innerHTML = "<br>";
-        range.collapse(false);
-        range.insertNode(p);
-        const newRange = document.createRange();
-        newRange.setStart(p, 0);
-        newRange.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(newRange);
-      }
-    });
-
-    function insertHtmlAtCursor(html){
-      editor.focus();
-      if(document.queryCommandSupported && document.queryCommandSupported("insertHTML")){
-        document.execCommand("insertHTML", false, html);
-      }else{
-        const sel = window.getSelection();
-        if(!sel || !sel.rangeCount) return;
-        const range = sel.getRangeAt(0);
-        range.deleteContents();
-        const frag = range.createContextualFragment(html);
-        range.insertNode(frag);
-        range.collapse(false);
-      }
-    }
-
     toolbar.addEventListener("click", (e)=>{
-      const btn = e.target.closest("button");
-      if(!btn) return;
-      const cmd = btn.dataset.cmd;
-      const val = btn.dataset.value || null;
-      const action = btn.dataset.action;
-
+      const btn = e.target.closest("button"); if(!btn) return;
+      const cmd = btn.dataset.cmd; const val = btn.dataset.value || null; const action = btn.dataset.action;
       editor.focus();
-
       if(cmd){
-        if(cmd === "formatBlock" && val){
-          // Chromium prefers angle-bracket form
-          const tag = val === "H3" ? "<h3>" : val;
-          document.execCommand("formatBlock", false, tag);
-        }else{
-          document.execCommand(cmd, false, val);
-        }
+        if(cmd === "formatBlock" && val){ const tag = val === "H3" ? "<h3>" : val; document.execCommand("formatBlock", false, tag); }
+        else document.execCommand(cmd, false, val);
         return;
       }
       if(action === "link"){
-        const href = prompt("Enter URL to link:", "https://");
-        const clean = sanitizeUrl(href || "");
-        if(!clean) return;
+        const href = prompt("Enter URL to link:", "https://"); const clean = sanitizeUrl(href || ""); if(!clean) return;
         document.execCommand("createLink", false, clean);
-        const sel = window.getSelection();
-        if(sel && sel.anchorNode){
+        const sel = window.getSelection(); if(sel && sel.anchorNode){
           const a = (sel.anchorNode.parentElement && sel.anchorNode.parentElement.closest("a"));
           if(a){ a.setAttribute("target","_blank"); a.setAttribute("rel","noopener"); }
         }
@@ -593,9 +459,8 @@
         document.execCommand("formatBlock", false, "PRE");
         const pre = editor.querySelector("pre");
         if(pre && !pre.querySelector("code")){
-          const c = document.createElement("code");
-          c.innerHTML = pre.innerHTML;
-          pre.replaceChildren(c);
+          const c=document.createElement("code");
+          c.innerHTML=pre.innerHTML; pre.replaceChildren(c);
         }
         return;
       }
@@ -606,246 +471,159 @@
       }
     });
 
-    // sanitize pasted content
     editor.addEventListener("paste", (e)=>{
       e.preventDefault();
       const html = e.clipboardData.getData("text/html");
       const text = e.clipboardData.getData("text/plain");
       const safe = sanitizeHtml(html || (text ? `<p>${escapeHtml(text).replace(/\n+/g,"</p><p>")}</p>` : ""));
-      insertHtmlAtCursor(safe);
+      document.execCommand("insertHTML", false, safe);
     });
 
-    // ---------- Attachments ----------
-    const attachments = []; // {name, type, size, dataUrl}
-
+    /* ---------- Attachments (short) ---------- */
+    const attachments = [];
     function addAttachmentFile(file){
       if(!file || !file.type.startsWith("image/")) return;
       const reader = new FileReader();
-      reader.onload = () => {
-        attachments.push({ name:file.name, type:file.type, size:file.size, dataUrl:reader.result });
-        renderAttachmentsGrid();
-      };
+      reader.onload = () => { attachments.push({ name:file.name, type:file.type, size:file.size, dataUrl:reader.result }); renderAttachmentsGrid(); };
       reader.readAsDataURL(file);
     }
-
     function renderAttachmentsGrid(){
-      const grid = byId("attachGrid");
-      grid.innerHTML = "";
+      const grid = byId("attachGrid"); grid.innerHTML = "";
       attachments.forEach((a, idx) => {
-        const card = document.createElement("div");
-        card.className = "img-card";
-        const img = document.createElement("img");
-        img.src = a.dataUrl;
-        img.alt = a.name || "attachment";
+        const card = document.createElement("div"); card.className = "img-card";
+        const img = document.createElement("img"); img.src = a.dataUrl; img.alt = a.name || "attachment";
         img.addEventListener("click", () => openAttachmentGallery(idx));
-        const remove = document.createElement("button");
-        remove.className = "img-remove";
-        remove.type = "button";
-        remove.textContent = "Remove";
-        remove.addEventListener("click", (e) => {
-          e.stopPropagation();
-          attachments.splice(idx,1);
-          renderAttachmentsGrid();
-        });
-        card.appendChild(img);
-        card.appendChild(remove);
-        grid.appendChild(card);
+        const remove = document.createElement("button"); remove.className = "img-remove"; remove.type = "button"; remove.textContent = "Remove";
+        remove.addEventListener("click", (e) => { e.stopPropagation(); attachments.splice(idx,1); renderAttachmentsGrid(); });
+        card.appendChild(img); card.appendChild(remove); grid.appendChild(card);
       });
     }
-
     const dropzone = byId("dropzone");
     dropzone.addEventListener("click", () => byId("fileImageInput").click());
     dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
     dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
-    dropzone.addEventListener("drop", (e) => {
-      e.preventDefault();
-      dropzone.classList.remove("dragover");
-      const files = Array.from(e.dataTransfer.files || []);
-      files.forEach(addAttachmentFile);
-    });
+    dropzone.addEventListener("drop", (e) => { e.preventDefault(); dropzone.classList.remove("dragover"); Array.from(e.dataTransfer.files||[]).forEach(addAttachmentFile); });
     dropzone.addEventListener("paste", (e) => {
-      const dt = e.clipboardData;
-      if(!dt) return;
-      const fileItem = Array.from(dt.items || []).find(i => i.kind === "file" && i.type.startsWith("image/"));
-      if(fileItem){
-        e.preventDefault();
-        addAttachmentFile(fileItem.getAsFile());
-      }
+      const dt = e.clipboardData; if(!dt) return;
+      const fileItem = Array.from(dt.items||[]).find(i => i.kind === "file" && i.type.startsWith("image/"));
+      if(fileItem){ e.preventDefault(); addAttachmentFile(fileItem.getAsFile()); }
     });
-    byId("fileImageInput").addEventListener("change", (e) => {
-      const files = Array.from(e.target.files || []);
-      files.forEach(addAttachmentFile);
-      e.target.value = ""; // reset
-    });
+    byId("fileImageInput").addEventListener("change", (e) => { Array.from(e.target.files||[]).forEach(addAttachmentFile); e.target.value = ""; });
     byId("btnUploadImage").addEventListener("click", () => byId("fileImageInput").click());
     byId("btnViewAttachments").addEventListener("click", () => openAttachmentGallery(0));
+    function openAttachmentGallery(startIndex=0){
+      const viewer = byId("imgViewer"); const grid = byId("imgGridModal"); viewer.innerHTML = ""; grid.innerHTML = "";
+      if(attachments.length === 0){
+        viewer.innerHTML = "<div class='muted'>No images in attachments.</div>";
+      }else{
+        const big = document.createElement("img");
+        big.src = attachments[Math.max(0, Math.min(startIndex, attachments.length-1))].dataUrl; viewer.appendChild(big);
+        attachments.forEach((a) => {
+          const card=document.createElement("div"); card.className="img-card";
+          const thumb=document.createElement("img"); thumb.src=a.dataUrl; thumb.addEventListener("click", () => { big.src = a.dataUrl; });
+          card.appendChild(thumb); grid.appendChild(card);
+        });
+      }
+      const modal = byId("imgModal"); modal.style.display="flex"; modal.setAttribute("aria-hidden","false");
+    }
+    byId("btnCloseModal").addEventListener("click", () => closeImageGallery());
+    function closeImageGallery(){ const modal = byId("imgModal"); modal.style.display="none"; modal.setAttribute("aria-hidden","true"); }
 
-    // ---------- Client Website ----------
+    /* ---------- Client website helpers ---------- */
     function setClientWebsite(url){
-      const input = byId("clientUrl");
-      const wrap = byId("clientUrlLinkWrap");
-      const link = byId("clientUrlLink");
-      input.value = url || "";
-      if(url){ show(wrap); link.href = url; }
-      else   { hide(wrap); }
+      const input = byId("clientUrl"); const wrap = byId("clientUrlLinkWrap"); const link = byId("clientUrlLink");
+      input.value = url || ""; if(url){ show(wrap); link.href = url; } else { hide(wrap); }
     }
     function updateClientWebsiteFromSelect(){
-      const raw = byId("client").value;
-      if(!raw){ setClientWebsite(""); return; }
+      const raw = byId("client").value; if(!raw){ setClientWebsite(""); return; }
       try{ const c = JSON.parse(raw); setClientWebsite(c.url || ""); }catch(_){ setClientWebsite(""); }
     }
 
-    // ---------- Due Date parsing ----------
+    /* ---------- Date helpers ---------- */
     function two(n){ return String(n).padStart(2,"0"); }
     function toLocalDatetimeValue(date){
-      const d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
+      const d=new Date(date.getTime()-date.getTimezoneOffset()*60000);
       return `${d.getUTCFullYear()}-${two(d.getUTCMonth()+1)}-${two(d.getUTCDate())}T${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`;
     }
     function parseRelativeSpec(s){
-      const m = s.trim().match(/^(?:in\s*)?([+-]?\d[\d\s\w:+-]*)$/i);
-      if(!m) return null;
-      const partRe = /([+-]?\d+)\s*(w|week|weeks|d|day|days|h|hr|hrs|hour|hours|m|min|mins|minute|minutes)/gi;
-      let totalMinutes = 0, found = false, p;
-      while((p = partRe.exec(s)) !== null){
-        found = true;
-        const val = parseInt(p[1],10);
-        const unit = p[2].toLowerCase();
-        let mult = 1;
-        if(unit.startsWith("w")) mult = 7*24*60;
-        else if(unit.startsWith("d")) mult = 24*60;
-        else if(unit.startsWith("h")) mult = 60;
-        else mult = 1;
-        totalMinutes += val * mult;
+      const m=s.trim().match(/^(?:in\s*)?([+-]?\d[\d\s\w:+-]*)$/i); if(!m) return null;
+      const partRe=/([+-]?\d+)\s*(w|week|weeks|d|day|days|h|hr|hrs|hour|hours|m|min|mins|minute|minutes)/gi;
+      let totalMinutes=0, found=false, p;
+      while((p=partRe.exec(s))!==null){ found=true; const val=parseInt(p[1],10); const unit=p[2].toLowerCase(); let mult=1;
+        if(unit.startsWith("w")) mult=7*24*60; else if(unit.startsWith("d")) mult=24*60; else if(unit.startsWith("h")) mult=60; else mult=1;
+        totalMinutes += val*mult;
       }
-      if(!found){
-        const bare = s.trim().match(/^([+-]?\d+)$/);
-        if(!bare) return null;
-        totalMinutes = parseInt(bare[1],10) * 60;
-      }
-      return new Date(Date.now() + totalMinutes*60000);
+      if(!found){ const bare=s.trim().match(/^([+-]?\d+)$/); if(!bare) return null; totalMinutes = parseInt(bare[1],10)*60; }
+      return new Date(Date.now()+totalMinutes*60000);
     }
     function setAutoDueDate(spec){
-      const input = byId("dueDate");
-      if(!spec){ input.value = ""; return; }
-      const s = String(spec).trim();
-
-      const absMatch = s.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}):?(\d{2}))?$/);
-      if(absMatch){
-        const [_, d, hh="00", mm="00"] = absMatch;
-        input.value = `${d}T${hh}:${mm}`;
-        return;
-      }
-      const native = new Date(s);
-      if(!isNaN(native.getTime())){
-        input.value = toLocalDatetimeValue(native);
-        return;
-      }
-      const rel = parseRelativeSpec(s);
-      if(rel){
-        input.value = toLocalDatetimeValue(rel);
-        return;
-      }
-      input.value = "";
+      const input=byId("dueDate"); if(!spec){ input.value=""; return; }
+      const s=String(spec).trim();
+      const absMatch=s.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}):?(\d{2}))?$/);
+      if(absMatch){ const [_,d,hh="00",mm="00"]=absMatch; input.value=`${d}T${hh}:${mm}`; return; }
+      const native=new Date(s); if(!isNaN(native.getTime())){ input.value=toLocalDatetimeValue(native); return; }
+      const rel=parseRelativeSpec(s); if(rel){ input.value=toLocalDatetimeValue(rel); return; }
+      input.value="";
     }
 
-    // ---------- SEARCHABLE POPOVER ----------
-    function normalizeText(s){
-      return String(s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
-    }
+    /* ---------- Searchable select popover ---------- */
+    function normalizeText(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,""); }
     function enhanceSelect(selectEl){
       if(selectEl.dataset.enhanced) return;
-      selectEl.dataset.enhanced = "1";
-      const anchor = selectEl.closest(".select-anchor") || selectEl.parentElement;
-      anchor.style.position = "relative";
-
-      let pop = null, search = null, list = null;
-      let items = [];
-
-      function buildItems(){
-        const opts = Array.from(selectEl.options);
-        items = opts.slice(1).map(o => ({ label: o.textContent || "", value: o.value }));
-      }
+      selectEl.dataset.enhanced="1";
+      const anchor=selectEl.closest(".select-anchor")||selectEl.parentElement; anchor.style.position="relative";
+      let pop=null, search=null, list=null; let items=[];
+      function buildItems(){ const opts=Array.from(selectEl.options); items=opts.slice(1).map(o=>({label:o.textContent||"", value:o.value})); }
       function openPopover(){
-        closePopover();
-        buildItems();
-        pop = document.createElement("div");
-        pop.className = "pop-wrap";
-        pop.style.setProperty('--pop-width', `${selectEl.offsetWidth}px`);
-        pop.style.top = (selectEl.offsetHeight + 6) + "px";
-        pop.style.left = "0";
-        search = document.createElement("input");
-        search.type = "text"; search.className = "pop-search"; search.placeholder = "Type to search…";
-        list = document.createElement("div"); list.className = "pop-list";
+        closePopover(); buildItems();
+        pop=document.createElement("div"); pop.className="pop-wrap";
+        pop.style.setProperty('--pop-width', `${selectEl.offsetWidth}px`); pop.style.top=(selectEl.offsetHeight+6)+"px"; pop.style.left="0";
+        search=document.createElement("input"); search.type="text"; search.className="pop-search"; search.placeholder="Type to search…";
+        list=document.createElement("div"); list.className="pop-list";
         pop.appendChild(search); pop.appendChild(list); anchor.appendChild(pop);
-        renderList(items);
-        search.focus();
-        search.addEventListener("input", handleFilter);
-        search.addEventListener("keydown", handleKeys);
-        list.addEventListener("click", handleClick);
-        document.addEventListener("mousedown", outsideClose, true);
-        window.addEventListener("resize", closePopover);
+        renderList(items); search.focus();
+        search.addEventListener("input", handleFilter); search.addEventListener("keydown", handleKeys); list.addEventListener("click", handleClick);
+        document.addEventListener("mousedown", outsideClose, true); window.addEventListener("resize", closePopover);
       }
-      function closePopover(){
-        if(pop){ document.removeEventListener("mousedown", outsideClose, true); window.removeEventListener("resize", closePopover); pop.remove(); }
-        pop = search = list = null;
-      }
-      function outsideClose(e){ if(pop && !pop.contains(e.target) && e.target !== selectEl) closePopover(); }
-      function handleClick(e){
-        const item = e.target.closest(".pop-item"); if(!item) return;
-        selectEl.value = item.dataset.value;
-        selectEl.dispatchEvent(new Event("change", {bubbles:true}));
-        closePopover(); selectEl.focus();
-      }
+      function closePopover(){ if(pop){ document.removeEventListener("mousedown", outsideClose, true); window.removeEventListener("resize", closePopover); pop.remove(); } pop=search=list=null; }
+      function outsideClose(e){ if(pop && !pop.contains(e.target) && e.target!==selectEl) closePopover(); }
+      function handleClick(e){ const item=e.target.closest(".pop-item"); if(!item) return; selectEl.value=item.dataset.value; selectEl.dispatchEvent(new Event("change",{bubbles:true})); closePopover(); selectEl.focus(); }
       function handleKeys(e){
-        const focusable = Array.from(list.querySelectorAll(".pop-item"));
-        const current = list.querySelector('.pop-item[aria-selected="true"]');
-        let idx = current ? focusable.indexOf(current) : -1;
-        if(e.key === "ArrowDown"){ e.preventDefault(); idx = Math.min(idx + 1, focusable.length - 1); setActive(focusable[idx]); }
-        else if(e.key === "ArrowUp"){ e.preventDefault(); idx = Math.max(idx - 1, 0); setActive(focusable[idx]); }
-        else if(e.key === "Enter"){ e.preventDefault(); if(current){ selectEl.value = current.dataset.value; selectEl.dispatchEvent(new Event("change", {bubbles:true})); closePopover(); selectEl.focus(); } }
-        else if(e.key === "Escape"){ e.preventDefault(); closePopover(); selectEl.focus(); }
+        const focusable=Array.from(list.querySelectorAll(".pop-item"));
+        const current=list.querySelector('.pop-item[aria-selected="true"]'); let idx=current?focusable.indexOf(current):-1;
+        if(e.key==="ArrowDown"){ e.preventDefault(); idx=Math.min(idx+1, focusable.length-1); setActive(focusable[idx]); }
+        else if(e.key==="ArrowUp"){ e.preventDefault(); idx=Math.max(idx-1, 0); setActive(focusable[idx]); }
+        else if(e.key==="Enter"){ e.preventDefault(); if(current){ selectEl.value=current.dataset.value; selectEl.dispatchEvent(new Event("change",{bubbles:true})); closePopover(); selectEl.focus(); } }
+        else if(e.key==="Escape"){ e.preventDefault(); closePopover(); selectEl.focus(); }
       }
-      function setActive(el){ list.querySelectorAll(".pop-item[aria-selected]").forEach(x => x.removeAttribute("aria-selected")); if(el){ el.setAttribute("aria-selected","true"); el.scrollIntoView({block:"nearest"}); } }
-      function handleFilter(){ const q = normalizeText(search.value); const filtered = q ? items.filter(i => normalizeText(i.label).includes(q)) : items.slice(); renderList(filtered); }
+      function setActive(el){ list.querySelectorAll(".pop-item[aria-selected]").forEach(x=>x.removeAttribute("aria-selected")); if(el){ el.setAttribute("aria-selected","true"); el.scrollIntoView({block:"nearest"}); } }
+      function handleFilter(){ const q=normalizeText(search.value); const filtered=q?items.filter(i=>normalizeText(i.label).includes(q)):items.slice(); renderList(filtered); }
       function renderList(arr){
-        list.innerHTML = "";
-        if(arr.length === 0){ const empty = document.createElement("div"); empty.className="pop-item"; empty.style.cursor="default"; empty.textContent="No matches"; list.appendChild(empty); return; }
-        arr.forEach((it,i) => { const div = document.createElement("div"); div.className="pop-item"; div.textContent=it.label; div.dataset.value=it.value; if(i===0) div.setAttribute("aria-selected","true"); list.appendChild(div); });
+        list.innerHTML=""; if(arr.length===0){ const empty=document.createElement("div"); empty.className="pop-item"; empty.style.cursor="default"; empty.textContent="No matches"; list.appendChild(empty); return; }
+        arr.forEach((it,i)=>{ const div=document.createElement("div"); div.className="pop-item"; div.textContent=it.label; div.dataset.value=it.value; if(i===0) div.setAttribute("aria-selected","true"); list.appendChild(div); });
       }
-      selectEl.addEventListener("mousedown", (e) => { if(selectEl.disabled) return; e.preventDefault(); if(pop) closePopover(); else openPopover(); });
-      selectEl.addEventListener("keydown", (e) => { if(selectEl.disabled) return; if(e.key==="ArrowDown"||e.key==="Enter"||e.key===" "){ e.preventDefault(); if(!pop) openPopover(); } });
+      selectEl.addEventListener("mousedown", (e)=>{ if(selectEl.disabled) return; e.preventDefault(); if(pop) closePopover(); else openPopover(); });
+      selectEl.addEventListener("keydown", (e)=>{ if(selectEl.disabled) return; if(e.key==="ArrowDown"||e.key==="Enter"||e.key===" "){ e.preventDefault(); if(!pop) openPopover(); } });
     }
 
-    // ---------- FETCH CHOICES ----------
+    /* ---------- FETCH CHOICES ---------- */
     async function fetchChoices(){
-      // If your workflow is OFF, point CHOICES_URL to /webhook-test/...
       const url = CHOICES_URL + "?t=" + Date.now();
       let res, text;
-      try {
-        res = await fetch(url, { method:"GET", cache:"no-store" });
-      } catch (netErr) {
-        throw new Error("Network error or CORS. " + String(netErr));
-      }
-      try {
-        text = await res.text();
-      } catch {
-        throw new Error(`HTTP ${res?.status || "?"} - failed reading response body.`);
-      }
+      try { res = await fetch(url, { method:"GET", cache:"no-store" }); }
+      catch (netErr) { throw new Error("Network error or CORS. " + String(netErr)); }
+      try { text = await res.text(); }
+      catch { throw new Error(`HTTP ${res?.status || "?"} - failed reading response body.`); }
       if (!res.ok) throw new Error(`HTTP ${res.status} from CHOICES_URL.\nBody:\n${text}`);
-      let data;
-      try { data = JSON.parse(text); }
-      catch { throw new Error(`Invalid JSON from CHOICES_URL.\nBody was:\n${text}`); }
+      let data; try { data = JSON.parse(text); } catch { throw new Error(`Invalid JSON from CHOICES_URL.\nBody was:\n${text}`); }
       return data;
     }
 
     async function handleFetchNew(){
       try{
         setStatus("Fetching latest data…");
-        hide(byId("success"));
-        hide(byId("respPretty"));
-        hide(byId("respWrap"));
-        enableForm(false);
-
+        hide(byId("success")); hide(byId("respPretty")); hide(byId("respWrap")); hide(byId("assignResult"));
+        enableForm(false); hideAssigneeSection();
         const data = await fetchChoices();
 
         const submitters = Array.isArray(data.submitters) ? data.submitters.map(s => ({ label:String(s.label||"").trim(), value:String(s.value||"").trim() })) : [];
@@ -863,212 +641,471 @@
           due:   String(t.due   || t.dueDates || t["Due Dates"] || t["Due Date"] || "").trim()
         })) : [];
 
-        const finalSubmitters = dedupeBy(submitters, x => x.value);
-        const finalClients    = dedupeBy(clients,    x => x.value);
-        const finalTemplates  = dedupeBy(templates,  x => x.value);
+        fillSubmitter(dedupeBy(submitters, x => x.value));
+        fillClient   (dedupeBy(clients,    x => x.value));
+        fillTemplates(dedupeBy(templates,  x => x.value));
 
-        fillSubmitter(finalSubmitters);
-        fillClient(finalClients);
-        fillTemplates(finalTemplates);
-
-        const ok = finalSubmitters.length && finalClients.length && finalTemplates.length;
+        const ok = submitters.length && clients.length && templates.length;
         enableForm(!!ok);
         setStatus(ok ? "All data is added." : "Fetched, but no rows found. Add rows in the sheet and try again.");
 
         byId("client").addEventListener("change", updateClientWebsiteFromSelect);
         byId("template").addEventListener("change", handleTemplateChange);
 
-        setClientWebsite("");
-        byId("dueDate").value = "";
+        setClientWebsite(""); byId("dueDate").value = "";
       }catch(e){
-        console.error(e);
         setStatus("Couldn't fetch new data.\n" + String(e.message || e), true);
-        // Show diagnostic for anyone
-        const raw = byId("respRaw");
-        raw.textContent = String(e.stack || e.message || e);
-        show(byId("respWrap"));
+        const raw = byId("respRaw"); raw.textContent = String(e.stack || e.message || e);
+        if (SHOW_DEBUG) show(byId("respWrap"));
       }
     }
 
-    // ---------- TEMPLATE -> DESCRIPTION + DUE (+ TITLE) ----------
     function handleTemplateChange(){
       const raw = byId("template").value;
-      if(!raw){
-        editor.innerHTML = "";
-        byId("dueDate").value = "";
-        const tt = byId("taskTitle");
-        if (tt) tt.value = "";
-        return;
-      }
+      if(!raw){ editor.innerHTML = ""; byId("dueDate").value = ""; (byId("taskTitle")||{}).value = ""; return; }
       try{
-        const t = JSON.parse(raw); // { id, name, data, due }
+        const t = JSON.parse(raw);
         const isHtml = /<\/?[a-z][\s\S]*>/i.test(t.data || "");
         const htmlRaw = isHtml ? t.data : (t.data || "").split("\n").map(line => `<p>${escapeHtml(line)}</p>`).join("");
-        editor.innerHTML = sanitizeHtml(htmlRaw);
-        setAutoDueDate(t.due || "");
-
-        const tt = byId("taskTitle");
-        if (tt) tt.value = (t.name || "").toString().trim();
-      }catch(_){
-        editor.innerHTML = "";
-        byId("dueDate").value = "";
-        const tt = byId("taskTitle");
-        if (tt) tt.value = "";
-      }
+        editor.innerHTML = sanitizeHtml(htmlRaw); setAutoDueDate(t.due || "");
+        const tt = byId("taskTitle"); if (tt) tt.value = (t.name || "").toString().trim();
+      }catch(_){ editor.innerHTML = ""; byId("dueDate").value = ""; (byId("taskTitle")||{}).value = ""; }
     }
 
-   // ---------- SUBMIT ----------
-async function submitForm(e){
-  e.preventDefault();
-  hide(byId("success"));
-  hide(byId("respPretty"));
-  hide(byId("respWrap"));
+    /* ---------- SUBTASK SECTION ---------- */
+    let latestSubtasks = [];
+    let lastHiddenContext = { client:"", taskType:"", link:"" };
+    let lastWebhookObj = null;    // full parsed last response (if JSON)
+    let lastWebhookText = "";     // raw text of last response
 
-  const rawSubmitter = byId("submitter").value;
-  const rawClient    = byId("client").value;
-  const rawTemplate  = byId("template").value;
-  const team         = byId("team").value;
-  const taskTitle    = (byId("taskTitle")?.value || "").trim(); // NEW
-  if(!rawSubmitter || !rawClient || !rawTemplate || !team){
-    setStatus("Please choose submitter, team, client, and template.", true);
-    return;
-  }
-
-  const submitter = JSON.parse(rawSubmitter);
-  const client    = JSON.parse(rawClient);
-  const template  = JSON.parse(rawTemplate);
-
-  // Normalize + sanitize editor HTML so ClickUp gets exactly what you typed
-  // === Build 3 parallel versions of the description ===
-// 1) Raw HTML as typed (max fidelity)
-const htmlRaw = editor.innerHTML || "";
-
-// 2) Safe HTML (lightly sanitized, but keep structure)
-const htmlSafe = sanitizeHtml(htmlRaw);
-
-// 3) Plain text and Markdown fallbacks
-const textPlain = editor.innerText || editor.textContent || "";
-const markdown  = htmlSafe
-  .replace(/<\s*h[1-6]\s*>/gi, '\n\n**')
-  .replace(/<\s*\/\s*h[1-6]\s*>/gi, '**\n\n')
-  .replace(/<\s*li\s*>/gi, '\n- ')
-  .replace(/<\s*\/\s*li\s*>/gi, '')
-  .replace(/<\s*br\s*\/?>/gi, '\n')
-  .replace(/<\/p>/gi, '\n\n')
-  .replace(/<[^>]+>/g, '')
-  .trim();
-
-// Put one into the hidden <textarea> (use the safe HTML)
-byId("description").value = htmlSafe;
-
-// Optional: show what we're about to send (helps debugging)
-byId("respRaw").textContent =
-  `HTML length: ${htmlSafe.length}\n` +
-  `MD length:   ${markdown.length}\n` +
-  `TXT length:  ${textPlain.length}\n\n` +
-  `HTML preview:\n${htmlSafe}\n`;
-show(byId("respWrap"));
-
-  const dueDateTime = byId("dueDate").value || "";
-
-  // (Optional) show exactly what we are sending so you can verify both paragraphs exist
-
-  setStatus("Submitting ticket…");
-  try {
-    const r = await fetch(TICKET_WEBHOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        submitterId: submitter.id,
-        submitterName: submitter.name,
-        team,
-        clientName: client.name,
-        clientListId: client.listId,
-        clientFolderId: client.folderId,
-        clientTicketTemplateId: client.ticketId,
-        clientUrl: client.url || "",
-        templateId: template.id,
-        templateName: template.name,
-        taskTitle: taskTitle || (template.name || ""), // NEW
-        dueDateTime,
-        // ✅ Send ONE canonical description field (HTML only)
-        descriptionHtml: htmlSafe,     // preferred cleaned HTML
-        descriptionHtmlRaw: htmlRaw,   // exact keystrokes from editor
-        descriptionMarkdown: markdown, // markdown fallback
-        descriptionText: textPlain,    // plain text fallback
-        attachments: attachments.map(a => ({
-          filename: a.name, type: a.type, size: a.size, dataUrl: a.dataUrl
-        }))
-      })
-    });
-
-    const body = await r.text();
-    setStatus("");
-
-    // Show server response to the user
-    byId("respRaw").textContent = `HTTP ${r.status}\n\n${body}`;
-    show(byId("respWrap"));
-    renderPrettyResponse(body, r.status);
-
-    if (r.ok) {
-      try {
-        const obj = JSON.parse(body);
-        setSuccess(obj);
-      } catch {
-        setSuccess(body || "Task created successfully.");
-      }
-    } else {
-      setStatus(`There was a problem. HTTP ${r.status}`, true);
+    function submitterOptions(){
+      const sel = byId("submitter");
+      return Array.from(sel.options).slice(1).map(o => ({ label:o.textContent || "", value:o.value }));
     }
-  } catch (err) {
-    console.error(err);
-    setStatus("Network error while submitting ticket.\n" + String(err), true);
-    byId("respRaw").textContent = String(err.stack || err);
-    show(byId("respWrap"));
-  }
-}
 
-    // ---------- GALLERY ----------
-    function openAttachmentGallery(startIndex=0){
-      const viewer = byId("imgViewer");
-      const grid   = byId("imgGridModal");
-      viewer.innerHTML = "";
-      grid.innerHTML = "";
-      if(attachments.length === 0){
-        viewer.innerHTML = "<div class='muted'>No images in attachments.</div>";
-      }else{
-        const big = document.createElement("img");
-        big.src = attachments[Math.max(0, Math.min(startIndex, attachments.length-1))].dataUrl;
-        viewer.appendChild(big);
-        attachments.forEach((a, idx) => {
-          const card = document.createElement("div");
-          card.className = "img-card";
-          const thumb = document.createElement("img");
-          thumb.src = a.dataUrl;
-          thumb.addEventListener("click", () => { big.src = a.dataUrl; });
-          card.appendChild(thumb);
-          grid.appendChild(card);
+    function buildAssigneeRow(row, idx){
+      const opts = submitterOptions();
+      const selId = `assigneeSel_${idx}`;
+      const timeId = `timeEstimate_${idx}`;
+      const rendered = [
+        `<option value="" selected>Select a team member…</option>`,
+        ...opts.map(o => `<option value='${escapeHtml(o.value)}'>${escapeHtml(o.label)}</option>`)
+      ].join("");
+      return `
+        <tr data-id="${escapeHtml(row.id)}" data-name="${escapeHtml(row.name)}"
+            data-client="${escapeHtml(lastHiddenContext.client)}"
+            data-tasktype="${escapeHtml(lastHiddenContext.taskType)}"
+            data-link="${escapeHtml(lastHiddenContext.link)}">
+          <td class="mono"><code>${escapeHtml(row.id)}</code></td>
+          <td>${escapeHtml(row.name)}</td>
+          <td>
+            <div class="select-anchor">
+              <select id="${selId}" class="assigneeSel" data-searchable>
+                ${rendered}
+              </select>
+            </div>
+          </td>
+          <td>
+            <input id="${timeId}" class="timeEstimate time-input" type="text"
+                   placeholder="e.g., 1h 30m, 1:30, 90m, 1.5h" aria-label="Time estimate"/>
+            <div class="time-hint"></div>
+          </td>
+        </tr>`;
+    }
+
+    function renderAssigneeSection(rows){
+      latestSubtasks = rows.slice();
+      const wrap = byId("assigneeTableWrap");
+      if (!rows.length){ wrap.innerHTML = ""; hideAssigneeSection(); return; }
+      const thead = `
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Subtask</th>
+            <th>Assign</th>
+            <th>Time estimate</th>
+          </tr>
+        </thead>`;
+      const tbody = `<tbody>${rows.map((r,i)=>buildAssigneeRow(r,i)).join("")}</tbody>`;
+      wrap.innerHTML = `<table class="subtask-table">${thead}${tbody}</table>`;
+      show(byId("assigneeSection"));
+      wrap.querySelectorAll("select.assigneeSel").forEach(enhanceSelect);
+      attachTimeInputHelpers();
+    }
+
+    function hideAssigneeSection(){
+      hide(byId("assigneeSection"));
+      byId("assigneeTableWrap").innerHTML = "";
+    }
+
+    // Extract subtasks (flexible keys) from server response
+    function extractSubtasksFromResponse(obj){
+      const out = [];
+      const pushIf = (id, name) => { if(id && name) out.push({ id:String(id), name:String(name) }); };
+
+      if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+        const id  = obj.ID ?? obj.Id ?? obj.id ?? obj.task_id ?? obj.short_id ?? obj.value;
+        const name = obj.Subtask ?? obj.subtask ?? obj.name ?? obj.title ?? obj.text ?? obj.content ?? obj.label ?? obj.Name;
+        if (id && name) pushIf(id, name);
+      }
+
+      const tryArr = (arr) => {
+        if (!Array.isArray(arr)) return;
+        arr.forEach(it => {
+          const id = it?.id ?? it?.ID ?? it?.task_id ?? it?.short_id ?? it?.shortId ?? it?.subtaskId ?? it?.SubtaskID ?? it?.value ?? it?.Id;
+          const name = it?.name ?? it?.title ?? it?.text ?? it?.subtask ?? it?.Subtask ?? it?.content ?? it?.label ?? it?.Name;
+          pushIf(id, name);
+        });
+      };
+
+      tryArr(obj?.subtasks);
+      tryArr(obj?.subTasks);
+      tryArr(obj?.created_subtasks);
+      tryArr(obj?.data);
+      tryArr(obj?.items);
+      tryArr(obj?.rows);
+      tryArr(obj?.list);
+      tryArr(obj?.children);
+      tryArr(obj?.result?.subtasks);
+      if (Array.isArray(obj)) tryArr(obj);
+
+      const seen = new Set();
+      return out.filter(r => r.id && !seen.has(r.id) && seen.add(r.id));
+    }
+
+    /* ---------- Time estimate parsing + helpers ---------- */
+    function parseTimeEstimate(s){
+      if(s == null) return { minutes:null, normalized:null };
+      let raw = String(s).trim().toLowerCase();
+      if(!raw) return { minutes:null, normalized:null };
+
+      // 1:30 style
+      const colon = raw.match(/^(-?\d+)\s*:\s*(\d{1,2})$/);
+      if(colon){
+        const h = parseInt(colon[1],10);
+        const m = parseInt(colon[2],10);
+        if(Number.isFinite(h) && Number.isFinite(m)){
+          const mins = h*60 + m;
+          return { minutes: mins, normalized: formatMinutes(mins) };
+        }
+      }
+
+      // normalize words to tokens
+      raw = raw
+        .replace(/,/g,' ')
+        .replace(/\band\b/g,' ')
+        .replace(/hours?/g,'h')
+        .replace(/hrs?/g,'h')
+        .replace(/minutes?/g,'m')
+        .replace(/mins?/g,'m')
+        .replace(/\s+/g,'');
+
+      let minutes = 0;
+      let found = false;
+
+      const h = raw.match(/(-?\d+(?:\.\d+)?)h/);
+      if(h){
+        const hours = parseFloat(h[1]);
+        if(Number.isFinite(hours)){ minutes += Math.round(hours*60); found = true; }
+      }
+      const m = raw.match(/(-?\d+)m/);
+      if(m){
+        const mins = parseInt(m[1],10);
+        if(Number.isFinite(mins)){ minutes += mins; found = true; }
+      }
+
+      if(!found){
+        // numeric only: decimal => hours, integer => minutes
+        if(/^-?\d+(\.\d+)?$/.test(raw)){
+          if(raw.includes('.')){
+            const hours = parseFloat(raw);
+            if(Number.isFinite(hours)){ minutes = Math.round(hours*60); found = true; }
+          }else{
+            const mins = parseInt(raw,10);
+            if(Number.isFinite(mins)){ minutes = mins; found = true; }
+          }
+        }else{
+          return { minutes:null, normalized:null };
+        }
+      }
+
+      if(!Number.isFinite(minutes) || minutes < 0) return { minutes:null, normalized:null };
+      return { minutes, normalized: formatMinutes(minutes) };
+    }
+
+    function formatMinutes(mins){
+      const h = Math.floor(mins/60);
+      const m = mins % 60;
+      if(h && m) return `${h}h ${m}m`;
+      if(h) return `${h}h`;
+      return `${m}m`;
+    }
+
+    function attachTimeInputHelpers(){
+      document.querySelectorAll('#assigneeTableWrap .timeEstimate').forEach(input => {
+        const hint = input.parentElement.querySelector('.time-hint');
+        const update = () => {
+          const { minutes, normalized } = parseTimeEstimate(input.value);
+          if(minutes != null){
+            hint.textContent = `Parsed: ${normalized} (${minutes}m)`;
+            input.classList.remove('invalid');
+          }else{
+            hint.textContent = `Enter like 1h 30m, 1:30, 90m, 1.5h, or "2 hours 15 minutes"`;
+            if(input.value.trim()) input.classList.add('invalid'); else input.classList.remove('invalid');
+          }
+        };
+        input.addEventListener('input', update);
+        // Enter should NOT clear — normalize on blur only
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault(); // don’t submit the big form
+            input.blur();       // normalize via blur handler
+          }
+        });
+        input.addEventListener('blur', () => {
+          const { minutes, normalized } = parseTimeEstimate(input.value);
+          if(minutes != null){ input.value = normalized; }
+          update();
+        });
+        update();
+      });
+    }
+
+    function appendToWebhookLog(label, status, body){
+      const raw = byId("respRaw");
+      raw.textContent += `${raw.textContent ? "\n\n" : ""}${label}\nHTTP ${status}\n\n${body}`;
+      if (SHOW_DEBUG) show(byId("respWrap"));
+      renderPrettyResponse(body, status);
+    }
+
+    function renderAssignResultCard(data){
+      // Accepts an object or the last object of an array
+      const wrap = byId("assignResult");
+      let obj = data;
+      if (Array.isArray(data)) obj = data[data.length - 1] || {};
+
+      // Prefer these keys; fall back to any simple string fields
+      const pick = (o, keys) => keys.find(k => k in o && (typeof o[k] === 'string' || typeof o[k] === 'number'));
+      const aKey = pick(obj, ["Assignee","assignee","assigned_to","owner"]);
+      const cKey = pick(obj, ["Client","client","workspace"]);
+      const tKey = pick(obj, ["Task Type","taskType","type"]);
+      const lKey = pick(obj, ["Link","link","taskUrl","url","permalink"]);
+
+      const items = [];
+      if (aKey) items.push(`<li><strong>Assignee:</strong> ${escapeHtml(String(obj[aKey]))}</li>`);
+      if (cKey) items.push(`<li><strong>Client:</strong> ${escapeHtml(String(obj[cKey]))}</li>`);
+      if (tKey) items.push(`<li><strong>Task Type:</strong> ${escapeHtml(String(obj[tKey]))}</li>`);
+      if (lKey) {
+        const href = escapeHtml(String(obj[lKey]));
+        items.push(`<li><strong>Link:</strong> <a href="${href}" target="_blank" rel="noopener">${href}</a></li>`);
+      }
+
+      // If the preferred keys weren’t present, show up to 10 simple entries
+      if (!items.length && obj && typeof obj === "object") {
+        Object.entries(obj).slice(0,10).forEach(([k,v])=>{
+          if (typeof v === 'string' || typeof v === 'number') {
+            const val = String(v);
+            items.push(
+              /https?:\/\//i.test(val)
+                ? `<li><strong>${escapeHtml(k)}:</strong> <a href="${escapeHtml(val)}" target="_blank" rel="noopener">${escapeHtml(val)}</a></li>`
+                : `<li><strong>${escapeHtml(k)}:</strong> ${escapeHtml(val)}</li>`
+            );
+          }
         });
       }
-      const modal = byId("imgModal");
-      modal.style.display = "flex";
-      modal.setAttribute("aria-hidden","false");
-    }
-    function closeImageGallery(){
-      const modal = byId("imgModal");
-      modal.style.display = "none";
-      modal.setAttribute("aria-hidden","true");
+
+      wrap.innerHTML = `<strong>Response 200</strong>${items.length ? `<ul style="margin:8px 0 0; padding-left:18px;">${items.join("")}</ul>` : ""}`;
+      show(wrap);
     }
 
-    // ---------- WIRE UP ----------
+    async function handleAssign(){
+      const rows = Array.from(document.querySelectorAll("#assigneeTableWrap tbody tr"));
+      hide(byId("assignResult")); // clear old
+      if (!rows.length){ setStatus("No subtasks to assign.", true); return; }
+
+      // Require a selection for every row
+      for (const tr of rows){
+        const sel = tr.querySelector("select.assigneeSel");
+        if (!sel || !sel.value){ setStatus("Please choose an assignee for every subtask.", true); return; }
+      }
+
+      // Build one item per row (include context + parsed time)
+      const items = rows.map(tr => {
+        const sel = tr.querySelector("select.assigneeSel");
+        const timeStr = tr.querySelector("input.timeEstimate")?.value || "";
+        const { minutes, normalized } = parseTimeEstimate(timeStr);
+
+        let assignee = { id:"", name:"" };
+        try { assignee = JSON.parse(sel.value); } catch {}
+
+        const base = (lastWebhookObj && typeof lastWebhookObj === "object" && !Array.isArray(lastWebhookObj))
+                      ? JSON.parse(JSON.stringify(lastWebhookObj)) : {};
+
+        const item = {
+          ...base,                           // include everything from last webhook (object form)
+          "ID": tr.dataset.id || "",
+          "Subtask": tr.dataset.name || "",
+          "Assignee": assignee.name || "",
+          "AssigneeId": assignee.id || "",
+          "Time Estimate": normalized ?? timeStr ?? "",
+          "TimeEstimateMinutes": minutes ?? null,
+          "Client": tr.dataset.client || "",
+          "Task Type": tr.dataset.tasktype || "",
+          "Link": tr.dataset.link || ""
+        };
+        if (Array.isArray(lastWebhookObj)) item._previousArray = lastWebhookObj;
+        if ((!lastWebhookObj || typeof lastWebhookObj !== "object") && lastWebhookText) item._previousRaw = lastWebhookText;
+        return item;
+      });
+
+      // UI: show waiting message, disable Assign button
+      const assignBtn = byId("btnAssign");
+      assignBtn.disabled = true;
+      setStatus("Assigning the subtasks…");
+
+      try{
+        const r = await fetch(SUBTASK_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(items) // root array, n8n can use "All Incoming Items"
+        });
+        const body = await r.text();
+        setStatus("");
+
+        // Always log quietly (hidden) for debugging
+        appendToWebhookLog("SUBTASK ASSIGN", r.status, body);
+
+        // Show ONLY the concise card with what your Respond to Webhook returned
+        try{
+          const json = JSON.parse(body);
+          renderAssignResultCard(json);
+        }catch{
+          // Not JSON? Show a small fallback message
+          const wrap = byId("assignResult");
+          wrap.innerHTML = `<strong>Response ${r.status}</strong><div style="margin-top:6px;">${escapeHtml(body)}</div>`;
+          show(wrap);
+        }
+      }catch(err){
+        setStatus("Network error while assigning.\n" + String(err), true);
+        appendToWebhookLog("SUBTASK ASSIGN (client error)", "?", String(err));
+      }finally{
+        assignBtn.disabled = false;
+      }
+    }
+
+    /* ---------- SUBMIT MAIN FORM ---------- */
+    async function submitForm(e){
+      e.preventDefault();
+      hide(byId("success")); hide(byId("respPretty")); hide(byId("respWrap"));
+      hideAssigneeSection(); hide(byId("assignResult"));
+
+      const rawSubmitter = byId("submitter").value;
+      const rawClient    = byId("client").value;
+      const rawTemplate  = byId("template").value;
+      const team         = byId("team").value;
+      const taskTitle    = (byId("taskTitle")?.value || "").trim();
+      if(!rawSubmitter || !rawClient || !rawTemplate || !team){
+        setStatus("Please choose submitter, team, client, and template.", true);
+        return;
+      }
+
+      const submitter = JSON.parse(rawSubmitter);
+      const client    = JSON.parse(rawClient);
+      const template  = JSON.parse(rawTemplate);
+
+      const htmlRaw  = editor.innerHTML || "";
+      const htmlSafe = sanitizeHtml(htmlRaw);
+      byId("description").value = htmlSafe;
+
+      const dueDateTime = byId("dueDate").value || "";
+
+      setStatus("Submitting ticket…");
+      try {
+        const r = await fetch(TICKET_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            submitterId: submitter.id,
+            submitterName: submitter.name,
+            team,
+            clientName: client.name,
+            clientListId: client.listId,
+            clientFolderId: client.folderId,
+            clientTicketTemplateId: client.ticketId,
+            clientUrl: client.url || "",
+            templateId: template.id,
+            templateName: template.name,
+            taskTitle: taskTitle || (template.name || ""),
+            dueDateTime,
+            descriptionHtml: htmlSafe,
+            descriptionHtmlRaw: htmlRaw,
+            attachments: attachments.map(a => ({ filename: a.name, type: a.type, size: a.size, dataUrl: a.dataUrl }))
+          })
+        });
+
+        const body = await r.text();
+        setStatus("");
+
+        // Keep a quiet debug copy but DO NOT show the raw block in UI
+        byId("respRaw").textContent = `TASK CREATE\nHTTP ${r.status}\n\n${body}`;
+        if (SHOW_DEBUG) show(byId("respWrap"));
+        renderPrettyResponse(body, r.status);
+
+        if (r.ok) {
+          let obj = null; try { obj = JSON.parse(body); } catch {}
+          lastWebhookObj = obj ?? null;       // keep full previous webhook result
+          lastWebhookText = body || "";
+          setSuccess("Task created successfully.");
+
+          const linkFromResp = (obj && (obj.link || obj.taskUrl || obj.url || obj.permalink))
+            ? String(obj.link || obj.taskUrl || obj.url || obj.permalink) : "";
+          lastHiddenContext = {
+            client: client.name || "",
+            taskType: template.name || "",
+            link: linkFromResp
+          };
+
+          const rows = extractSubtasksFromResponse(obj ?? {});
+          if (rows.length) {
+            renderAssigneeSection(rows);
+          } else {
+            // 👇 NEW: if NO SUBTASKS, show the Respond-to-Webhook payload nicely
+            try {
+              const json = obj ?? JSON.parse(body);
+              renderAssignResultCard(json);
+            } catch {
+              const wrap = byId("assignResult");
+              wrap.innerHTML = `<strong>Response ${r.status}</strong><div style="margin-top:6px;">${escapeHtml(body)}</div>`;
+              show(wrap);
+            }
+          }
+        } else {
+          setStatus(`There was a problem. HTTP ${r.status}`, true);
+        }
+      } catch (err) {
+        setStatus("Network error while submitting ticket.\n" + String(err), true);
+        byId("respRaw").textContent = String(err.stack || err);
+        if (SHOW_DEBUG) show(byId("respWrap"));
+      }
+    }
+
+    /* ---------- Prevent Enter from submitting when typing in the Subtask section ---------- */
+    document.addEventListener('keydown', (e)=>{
+      const inAssigneeArea = e.target && e.target.closest && e.target.closest('#assigneeSection');
+      if (inAssigneeArea && e.key === 'Enter') {
+        e.preventDefault(); // do not submit main form
+      }
+    });
+
+    /* ---------- WIRE UP ---------- */
     document.addEventListener("DOMContentLoaded", () => {
       enhanceSelect(byId("team"));
       enableForm(false);
       byId("btnFetch").addEventListener("click", handleFetchNew);
       byId("form").addEventListener("submit", submitForm);
-      byId("btnViewAttachments").addEventListener("click", () => openAttachmentGallery(0));
-      byId("btnCloseModal").addEventListener("click", closeImageGallery);
-      byId("imgModal").addEventListener("click", (e) => { if(e.target === byId("imgModal")) closeImageGallery(); });
+      byId("btnAssign").addEventListener("click", handleAssign);
+      byId("btnCloseModal").addEventListener("click", () => { const m=byId("imgModal"); m.style.display="none"; m.setAttribute("aria-hidden","true"); });
+      byId("imgModal").addEventListener("click", (e) => { if(e.target === byId("imgModal")) { const m=byId("imgModal"); m.style.display="none"; m.setAttribute("aria-hidden","true"); } });
     });
   </script>
 </body>
