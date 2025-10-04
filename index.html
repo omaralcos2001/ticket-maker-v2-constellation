@@ -130,6 +130,13 @@
     .time-input { width:100%; padding:8px; border:1px solid var(--g-200); border-radius:8px; }
     .time-hint { font-size:12px; color:#517a53; margin-top:4px; }
     .time-input.invalid { border-color:#f2b8b5; background:#fff8f8; }
+
+    /* ---- DELETE Subtask visuals ---- */
+    .subtask-table .delmark { display:inline-flex; align-items:center; gap:6px; font-weight:600; color:#b3261e; }
+    .subtask-table .delmark input { margin:0; }
+    .subtask-table tr.to-delete td { background:#fdecea !important; color:#b3261e; border-color:#f2b8b5; }
+    .subtask-table tr.to-delete select,
+    .subtask-table tr.to-delete input.timeEstimate { opacity:.5; pointer-events:none; }
   </style>
 </head>
 <body>
@@ -254,6 +261,7 @@
       <div id="assigneeTableWrap"></div>
       <div class="row" style="margin-top:12px;">
         <button type="button" id="btnAssign" class="primary">Assign</button>
+        <button type="button" id="btnDelete" class="ghost" disabled>Delete</button>
       </div>
     </div>
 
@@ -282,11 +290,11 @@
 
   <script>
     /* Endpoints */
-    const CHOICES_URL         = "https://n8n-14lp.onrender.com/webhook/ticket-choices"; // GET
-    const TICKET_WEBHOOK_URL  = "https://n8n-14lp.onrender.com/webhook/ticker-maker";   // POST
-    const SUBTASK_WEBHOOK_URL = "https://n8n-14lp.onrender.com/webhook/ticker-subtask"; // POST on Assign
+    const CHOICES_URL          = "https://n8n-14lp.onrender.com/webhook/ticket-choices"; // GET
+    const TICKET_WEBHOOK_URL   = "https://n8n-14lp.onrender.com/webhook/ticker-maker";   // POST
+    const SUBTASK_WEBHOOK_URL  = "https://n8n-14lp.onrender.com/webhook/ticker-subtask"; // POST on Assign
+    const DELETE_WEBHOOK_URL   = "https://n8n-14lp.onrender.com/webhook/delete-subtask"; // POST on Delete
 
-    /* Hidden debug toggle for raw webhook area */
     const SHOW_DEBUG = false;
 
     const $ = s => document.querySelector(s);
@@ -696,7 +704,15 @@
             data-client="${escapeHtml(lastHiddenContext.client)}"
             data-tasktype="${escapeHtml(lastHiddenContext.taskType)}"
             data-link="${escapeHtml(lastHiddenContext.link)}">
-          <td class="mono"><code>${escapeHtml(row.id)}</code></td>
+          <td class="mono">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <label class="delmark" title="Mark for deletion">
+                <input type="checkbox" class="deleteChk" />
+                <span>Delete</span>
+              </label>
+              <code>${escapeHtml(row.id)}</code>
+            </div>
+          </td>
           <td>${escapeHtml(row.name)}</td>
           <td>
             <div class="select-anchor">
@@ -731,6 +747,14 @@
       show(byId("assigneeSection"));
       wrap.querySelectorAll("select.assigneeSel").forEach(enhanceSelect);
       attachTimeInputHelpers();
+      attachDeleteCheckboxHandlers();
+      updateButtonsState();
+      wrap.addEventListener('change', (e)=>{
+        if(e.target.closest('.assigneeSel') || e.target.closest('.deleteChk')) updateButtonsState();
+      });
+      wrap.addEventListener('input', (e)=>{
+        if(e.target.closest('.timeEstimate')) updateButtonsState();
+      });
     }
 
     function hideAssigneeSection(){
@@ -738,7 +762,6 @@
       byId("assigneeTableWrap").innerHTML = "";
     }
 
-    // Extract subtasks (flexible keys) from server response
     function extractSubtasksFromResponse(obj){
       const out = [];
       const pushIf = (id, name) => { if(id && name) out.push({ id:String(id), name:String(name) }); };
@@ -779,7 +802,6 @@
       let raw = String(s).trim().toLowerCase();
       if(!raw) return { minutes:null, normalized:null };
 
-      // 1:30 style
       const colon = raw.match(/^(-?\d+)\s*:\s*(\d{1,2})$/);
       if(colon){
         const h = parseInt(colon[1],10);
@@ -790,7 +812,6 @@
         }
       }
 
-      // normalize words to tokens
       raw = raw
         .replace(/,/g,' ')
         .replace(/\band\b/g,' ')
@@ -815,7 +836,6 @@
       }
 
       if(!found){
-        // numeric only: decimal => hours, integer => minutes
         if(/^-?\d+(\.\d+)?$/.test(raw)){
           if(raw.includes('.')){
             const hours = parseFloat(raw);
@@ -855,12 +875,8 @@
           }
         };
         input.addEventListener('input', update);
-        // Enter should NOT clear — normalize on blur only
         input.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault(); // don’t submit the big form
-            input.blur();       // normalize via blur handler
-          }
+          if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
         });
         input.addEventListener('blur', () => {
           const { minutes, normalized } = parseTimeEstimate(input.value);
@@ -868,6 +884,24 @@
           update();
         });
         update();
+      });
+    }
+
+    /* ---- DELETE checkbox handlers ---- */
+    function attachDeleteCheckboxHandlers(){
+      document.querySelectorAll('#assigneeTableWrap .deleteChk').forEach(chk=>{
+        chk.addEventListener('change', ()=>{
+          const tr = chk.closest('tr');
+          if(!tr) return;
+          if(chk.checked){
+            tr.classList.add('to-delete');
+            const sel = tr.querySelector('select.assigneeSel'); if(sel) sel.value = "";
+            const time = tr.querySelector('input.timeEstimate'); if(time) time.value = "";
+          }else{
+            tr.classList.remove('to-delete');
+          }
+          updateButtonsState();
+        });
       });
     }
 
@@ -879,12 +913,10 @@
     }
 
     function renderAssignResultCard(data){
-      // Accepts an object or the last object of an array
       const wrap = byId("assignResult");
       let obj = data;
       if (Array.isArray(data)) obj = data[data.length - 1] || {};
 
-      // Prefer these keys; fall back to any simple string fields
       const pick = (o, keys) => keys.find(k => k in o && (typeof o[k] === 'string' || typeof o[k] === 'number'));
       const aKey = pick(obj, ["Assignee","assignee","assigned_to","owner"]);
       const cKey = pick(obj, ["Client","client","workspace"]);
@@ -900,7 +932,6 @@
         items.push(`<li><strong>Link:</strong> <a href="${href}" target="_blank" rel="noopener">${href}</a></li>`);
       }
 
-      // If the preferred keys weren’t present, show up to 10 simple entries
       if (!items.length && obj && typeof obj === "object") {
         Object.entries(obj).slice(0,10).forEach(([k,v])=>{
           if (typeof v === 'string' || typeof v === 'number') {
@@ -918,18 +949,160 @@
       show(wrap);
     }
 
-    async function handleAssign(){
+    /* ---- Button state logic ---- */
+    function updateButtonsState(){
       const rows = Array.from(document.querySelectorAll("#assigneeTableWrap tbody tr"));
-      hide(byId("assignResult")); // clear old
-      if (!rows.length){ setStatus("No subtasks to assign.", true); return; }
+      const anyDelete = rows.some(tr => tr.classList.contains('to-delete'));
+      const assignBtn = byId("btnAssign");
+      const deleteBtn = byId("btnDelete");
 
-      // Require a selection for every row
-      for (const tr of rows){
-        const sel = tr.querySelector("select.assigneeSel");
-        if (!sel || !sel.value){ setStatus("Please choose an assignee for every subtask.", true); return; }
+      let allFilledAndValid = true;
+      if(!anyDelete){
+        for(const tr of rows){
+          const sel = tr.querySelector("select.assigneeSel");
+          const timeInput = tr.querySelector("input.timeEstimate");
+          const hasAssignee = !!(sel && sel.value);
+          let timeOK = false;
+          if(timeInput){
+            const { minutes } = parseTimeEstimate(timeInput.value);
+            timeOK = minutes != null;
+          }
+          if(!(hasAssignee && timeOK)){ allFilledAndValid = false; break; }
+        }
       }
 
-      // Build one item per row (include context + parsed time)
+      deleteBtn.disabled = !anyDelete;
+      assignBtn.disabled = anyDelete || !allFilledAndValid;
+    }
+
+    /* ---- Low-level POST helpers for DELETE with fallbacks ---- */
+    async function postJSONWithFallback(url, data){
+      const payload = JSON.stringify(data);
+
+      // 1) Normal fetch with JSON (may be blocked by CORS/preflight)
+      try{
+        const r = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true
+        });
+        return { ok: r.ok, status: r.status, text: await r.text().catch(()=> "") };
+      }catch(_){ /* fall through */ }
+
+      // 2) navigator.sendBeacon (no preflight). We can't read response.
+      try{
+        const blob = new Blob([payload], { type: "application/json" });
+        const ok = navigator.sendBeacon(url, blob);
+        if (ok) return { ok: true, status: 200, text: "" };
+      }catch(_){ /* fall through */ }
+
+      // 3) fetch no-cors as text/plain (opaque response counts as fire-and-forget)
+      try{
+        const r = await fetch(url, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=UTF-8" }, // simple header
+          body: payload,
+          keepalive: true
+        });
+        // opaque response -> treat as success
+        return { ok: true, status: 200, text: "" };
+      }catch(_){ /* fall through */ }
+
+      // 4) Hidden FORM POST (bypasses CORS entirely)
+      try{
+        const iframe = document.createElement("iframe");
+        iframe.name = "hidden_delete_iframe";
+        iframe.style.display = "none";
+        document.body.appendChild(iframe);
+
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = url;
+        form.target = "hidden_delete_iframe";
+        form.style.display = "none";
+
+        // send under 'payload' field; n8n can read the raw field value
+        const input = document.createElement("textarea");
+        input.name = "payload";
+        input.value = payload;
+        form.appendChild(input);
+
+        document.body.appendChild(form);
+        form.submit();
+
+        // clean up a bit later
+        setTimeout(() => { form.remove(); iframe.remove(); }, 2000);
+
+        return { ok: true, status: 200, text: "" };
+      }catch(err){
+        return { ok: false, status: 0, text: String(err) };
+      }
+    }
+
+    /* ---- DELETE handler: posts ALL checked IDs to DELETE_WEBHOOK_URL ---- */
+    async function handleDelete(){
+      const rows = Array.from(document.querySelectorAll("#assigneeTableWrap tbody tr.to-delete"));
+      hide(byId("assignResult"));
+      if (!rows.length){ setStatus("No subtasks are marked for deletion.", true); return; }
+
+      const items = rows.map(tr => ({
+        "ID": tr.dataset.id || "",
+        "Action": "delete",
+        "Client": tr.dataset.client || "",
+        "Task Type": tr.dataset.tasktype || "",
+        "Link": tr.dataset.link || ""
+      }));
+
+      const deleteBtn = byId("btnDelete");
+      deleteBtn.disabled = true;
+      setStatus("Deleting subtasks…");
+
+      const res = await postJSONWithFallback(DELETE_WEBHOOK_URL, items);
+
+      if (res.ok){
+        // remove deleted rows from UI
+        rows.forEach(tr => tr.remove());
+        setStatus("");
+        if (res.text){
+          try { renderAssignResultCard(JSON.parse(res.text)); }
+          catch {
+            const wrap = byId("assignResult");
+            wrap.innerHTML = `<strong>Response ${res.status || 200}</strong><div style="margin-top:6px;">${escapeHtml(res.text)}</div>`;
+            show(wrap);
+          }
+        } else {
+          const wrap = byId("assignResult");
+          wrap.innerHTML = `<strong>Response 200</strong><div style="margin-top:6px;">Delete request sent.</div>`;
+          show(wrap);
+        }
+        appendToWebhookLog("SUBTASK DELETE", res.status || 200, res.text || "(no body)");
+      }else{
+        setStatus("Network error while deleting.\n" + (res.text || "Failed to send request."), true);
+        appendToWebhookLog("SUBTASK DELETE (client error)", res.status || "?", res.text || "no message");
+      }
+
+      deleteBtn.disabled = false;
+      updateButtonsState();
+    }
+
+    async function handleAssign(){
+      const rows = Array.from(document.querySelectorAll("#assigneeTableWrap tbody tr"));
+      hide(byId("assignResult"));
+      if (!rows.length){ setStatus("No subtasks to assign.", true); return; }
+
+      const anyDelete = rows.some(tr => tr.classList.contains('to-delete'));
+      if (anyDelete){ setStatus("Some subtasks are marked for deletion. Click Delete, or uncheck them to enable Assign.", true); return; }
+
+      for (const tr of rows){
+        const sel = tr.querySelector("select.assigneeSel");
+        const timeInput = tr.querySelector("input.timeEstimate");
+        if (!sel || !sel.value){ setStatus("Please choose an assignee for every subtask.", true); return; }
+        const { minutes } = parseTimeEstimate(timeInput?.value || "");
+        if (minutes == null){ setStatus("Please enter a valid time estimate for every subtask.", true); return; }
+      }
+
       const items = rows.map(tr => {
         const sel = tr.querySelector("select.assigneeSel");
         const timeStr = tr.querySelector("input.timeEstimate")?.value || "";
@@ -942,7 +1115,7 @@
                       ? JSON.parse(JSON.stringify(lastWebhookObj)) : {};
 
         const item = {
-          ...base,                           // include everything from last webhook (object form)
+          ...base,
           "ID": tr.dataset.id || "",
           "Subtask": tr.dataset.name || "",
           "Assignee": assignee.name || "",
@@ -958,7 +1131,6 @@
         return item;
       });
 
-      // UI: show waiting message, disable Assign button
       const assignBtn = byId("btnAssign");
       assignBtn.disabled = true;
       setStatus("Assigning the subtasks…");
@@ -967,20 +1139,17 @@
         const r = await fetch(SUBTASK_WEBHOOK_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(items) // root array, n8n can use "All Incoming Items"
+          body: JSON.stringify(items)
         });
         const body = await r.text();
         setStatus("");
 
-        // Always log quietly (hidden) for debugging
         appendToWebhookLog("SUBTASK ASSIGN", r.status, body);
 
-        // Show ONLY the concise card with what your Respond to Webhook returned
         try{
           const json = JSON.parse(body);
           renderAssignResultCard(json);
         }catch{
-          // Not JSON? Show a small fallback message
           const wrap = byId("assignResult");
           wrap.innerHTML = `<strong>Response ${r.status}</strong><div style="margin-top:6px;">${escapeHtml(body)}</div>`;
           show(wrap);
@@ -990,6 +1159,7 @@
         appendToWebhookLog("SUBTASK ASSIGN (client error)", "?", String(err));
       }finally{
         assignBtn.disabled = false;
+        updateButtonsState();
       }
     }
 
@@ -1013,6 +1183,7 @@
       const client    = JSON.parse(rawClient);
       const template  = JSON.parse(rawTemplate);
 
+      const editor = byId("descriptionEditor");
       const htmlRaw  = editor.innerHTML || "";
       const htmlSafe = sanitizeHtml(htmlRaw);
       byId("description").value = htmlSafe;
@@ -1046,14 +1217,13 @@
         const body = await r.text();
         setStatus("");
 
-        // Keep a quiet debug copy but DO NOT show the raw block in UI
         byId("respRaw").textContent = `TASK CREATE\nHTTP ${r.status}\n\n${body}`;
         if (SHOW_DEBUG) show(byId("respWrap"));
         renderPrettyResponse(body, r.status);
 
         if (r.ok) {
           let obj = null; try { obj = JSON.parse(body); } catch {}
-          lastWebhookObj = obj ?? null;       // keep full previous webhook result
+          lastWebhookObj = obj ?? null;
           lastWebhookText = body || "";
           setSuccess("Task created successfully.");
 
@@ -1069,7 +1239,6 @@
           if (rows.length) {
             renderAssigneeSection(rows);
           } else {
-            // 👇 NEW: if NO SUBTASKS, show the Respond-to-Webhook payload nicely
             try {
               const json = obj ?? JSON.parse(body);
               renderAssignResultCard(json);
@@ -1089,11 +1258,10 @@
       }
     }
 
-    /* ---------- Prevent Enter from submitting when typing in the Subtask section ---------- */
     document.addEventListener('keydown', (e)=>{
       const inAssigneeArea = e.target && e.target.closest && e.target.closest('#assigneeSection');
       if (inAssigneeArea && e.key === 'Enter') {
-        e.preventDefault(); // do not submit main form
+        e.preventDefault();
       }
     });
 
@@ -1104,6 +1272,7 @@
       byId("btnFetch").addEventListener("click", handleFetchNew);
       byId("form").addEventListener("submit", submitForm);
       byId("btnAssign").addEventListener("click", handleAssign);
+      byId("btnDelete").addEventListener("click", handleDelete);
       byId("btnCloseModal").addEventListener("click", () => { const m=byId("imgModal"); m.style.display="none"; m.setAttribute("aria-hidden","true"); });
       byId("imgModal").addEventListener("click", (e) => { if(e.target === byId("imgModal")) { const m=byId("imgModal"); m.style.display="none"; m.setAttribute("aria-hidden","true"); } });
     });
